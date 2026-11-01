@@ -353,6 +353,14 @@ test("spacious app rows keep their preview, full text and sources", async ({
       .boundingBox())!;
     expect(Math.round(mediaBox.width)).toBe(208);
     expect(Math.round(mediaBox.height)).toBe(156);
+    // GIMP omits thumbShape on purpose: a feature row defaults to the wide
+    // frame, so a screenshot never lands in the portrait poster box.
+    const fallback = await rows
+      .nth(2)
+      .locator(".ru-feature-media")
+      .boundingBox();
+    expect(Math.round(fallback!.width)).toBe(208);
+    expect(Math.round(fallback!.height)).toBe(156);
   }
 
   // Sources are links, and they do not live inside the detail button.

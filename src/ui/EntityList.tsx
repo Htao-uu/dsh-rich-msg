@@ -81,9 +81,10 @@ export function EntityList({
             {entity.image && (
               <button
                 type="button"
-                className={`ru-feature-media ru-feature-media-${
-                  entity.thumbShape ?? "poster"
-                }`}
+                className={`ru-feature-media ru-feature-media-${shapeOf(
+                  entity,
+                  "feature",
+                )}`}
                 onClick={() => onOpen(entity.id)}
                 aria-label={`Details: ${entity.title}`}
               >

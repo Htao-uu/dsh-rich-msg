@@ -1551,6 +1551,9 @@ describe("spacious entity rows", () => {
     expect(host.querySelector(".ru-poster-thumb")?.className).toContain(
       "ru-poster-landscape",
     );
+    expect(host.querySelector(".ru-feature-media")?.className).toContain(
+      "ru-feature-media-landscape",
+    );
     const description = host.querySelector(".ru-feature-description");
     expect(description?.textContent).toContain("frame-by-frame");
     expect(description?.className).not.toContain("clamp");
@@ -1758,6 +1761,9 @@ describe("preview shape defaults", () => {
     );
     expect(host.querySelector(".ru-poster-thumb")?.className).toContain(
       "ru-poster-landscape",
+    );
+    expect(host.querySelector(".ru-feature-media")?.className).toContain(
+      "ru-feature-media-landscape",
     );
     act(() =>
       root.render(

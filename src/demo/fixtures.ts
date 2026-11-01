@@ -805,7 +805,6 @@ export const apps: RichSpec = {
       kind: "Raster",
       title: "GIMP",
       subtitle: "Photo retouching and compositing",
-      thumbShape: "landscape",
       description:
         "Single-window mode finally keeps every dialog in one frame. Non-destructive editing is still limited compared with Photoshop, but scripting and plugin coverage are wide.",
       image:
