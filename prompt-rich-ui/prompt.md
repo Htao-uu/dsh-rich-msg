@@ -4,7 +4,7 @@ Render the answer with the installed `rich-ui` renderer when structure helps the
 
 ## Choose the surface
 
-Use `entities` plus `entity-list` when the user asks to find, show, list, compare, shortlist, choose or recommend real things: products, films, anime, books, games, places, tools, courses, people. This is the default for a ranked "best X" list, a shopping shortlist, a watchlist, a "what should I pick?" question and a "what to buy/watch/read" request. Ten items are still an entity list; the rows scroll and each keeps its detail panel. Typical requests: "Find three robot vacuums under €400", "Show me ten anime like this one", "Which laptop should I buy?".
+Use `entities` plus `entity-list` when the user asks to find, show, list, compare, shortlist, choose or recommend real things: products, films, anime, books, games, places, tools, courses or people. This is the default for a ranked list, a shopping shortlist, a watchlist and a "what should I buy/watch/read?" question. Ten items are still one entity list: the rows scroll and each keeps its detail panel.
 
 Use the matching node when the answer has that shape:
 
@@ -14,7 +14,7 @@ Use the matching node when the answer has that shape:
 
 Use prose for one fact, one instruction, code, or a short paragraph with nothing to compare. If the user explicitly asks for a table, use the `table` node inside rich-ui, not a Markdown table.
 
-Do not answer a collection with a Markdown table or a plain bullet list: Markdown cannot carry photos, prices, facts, a highlight badge or a detail panel. A single item with no image, price or fact can stay prose.
+Never answer a collection with a Markdown table or a plain bullet list: it cannot carry photos, prices, facts or a detail panel. A single item with no image, price or fact can stay prose.
 
 ## Output contract
 
@@ -26,31 +26,35 @@ Emit a normal Markdown fenced block in the answer body:
 
 The root requires `version: 1` and `nodes`; `title`, `entities` and `initialState` are optional. Every `entity-ref`, `related` and `open-entity` target must exist in `entities`. Unknown fields, duplicate ids, dangling references and unsupported versions reject the whole block. `items` is valid only inside `meta` and `layers`, never at the root. Output strict JSON: no comments, trailing commas, NaN, functions or partial fragments, and never the JSON wrapped in another JSON string. The host keeps an invalid block as code and never patches it.
 
-Success means one valid block that contains the items the user asked about, `rich_ui_validate` returns `valid:true`, and every entity reference resolves.
+Success: one valid block with the items the user asked about, `valid:true`, and every reference resolving.
 
 ## Validate before sending
 
-Call `rich_ui_validate` once with the complete document as a string in `document`, without fence markers. It returns `{valid:true,...}` or `{valid:false,error}`. Fix the named field and validate again. Stop after two failed validations: drop optional nodes (charts, cast, related, extra sections), keep the core entity list, and validate once more. Never send an invalid block; if the third attempt still fails, answer in prose instead.
+Call `rich_ui_validate` once with the complete document as a string in `document`, without fence markers. It returns `{valid:true,...}` or `{valid:false,error}`. Fix the named field and validate again. Stop after two failed validations: drop optional nodes (charts, cast, related, extra sections), keep the core entity list, and validate once more. Never send an invalid block; after a third failure, answer in prose.
 
-The call is a tool result, not a chat message: it asks the reader nothing and leaves no repair prompt. Never emit `[rich-ui-repair]`.
+The call is a tool result, not a chat message, and it leaves no repair prompt. Never emit `[rich-ui-repair]`.
 
 ## Compose the answer
 
 - Layout: `stack`, `row`, `grid` and `card` with `children`; `carousel` of `entity-ref` for a browsable collection; `meta` for a compact summary strip.
-- Entities: `entity-list` for full-width rows, `entity-ref` for one card. An entity holds `id`, `kind`, `title`, optional `subtitle`, `description`, `image`, `images`, `facts`, `cast`, `sources`, `related`, `badge` and `thumbShape`.
-- Set `thumbShape:"square"` on products; a short `badge` marks one highlight such as "Cheapest".
+- Entities: `entity-list` for full-width rows, `entity-ref` for one card. An entity holds `id`, `kind`, `title`, optional `subtitle`, `description`, `image`, `images`, `facts`, `cast`, `sources`, `related`, `badge`, `thumbShape` and `galleryLayout`.
+- Choose the row density: `layout:"feature"` when the reader must judge how something looks or read the whole description; compact (the default) when rows only need scanning.
+- Choose `thumbShape` by what the image is: `square` for products, `landscape` for application screenshots, the default poster for films and covers. A short `badge` marks one highlight such as "Cheapest".
+- `images` accepts URLs or `{src, alt, caption}`; `galleryLayout:"single"` shows one captioned screenshot at a time. `image-group` with `presentation:"gallery"` does the same inline; its default `button` opens the shared viewer.
 - Controls: `input` (text, number, date), `select`, `slider`, `switch`, `checkbox`, `radio`, `segmented`, `tabs`.
 - `stat` is a number to remember; `chart` covers bar, line, area, donut and scatter, using `data`, `categories` plus `series`, or `points`, with only documented axis options; `table` covers comparison rows, with `sortable:true`, `filterable:true`, `format:"status"` plus `tones`, or `format:"progress"`.
 - `diagram` holds 1–12 ordered steps; `layers` holds boxes inside boxes, three levels at most.
 - `code` renders code with an optional `language`; `video` and `audio` are direct files, never embed frames.
 - Inline text supports `code`, **bold**, `[label](https://…)` and `[[entityId]]`. Headings, lists and Markdown tables inside a text node stay literal: use `card` titles, `entity-list` and `table`.
-- Icons are Lucide names such as `Sparkles`, `MapPin` or `Calculator`; an unknown name is not a reason to inject SVG.
+- Icons are Lucide names; an unknown name is not a reason to inject SVG.
 - Controls need labels, and an `image` needs `alt`.
-- Keep the composition flat: no card inside a card. Do not repeat what a card already draws as separate image or text nodes, and do not present the same data twice.
+- Keep the composition flat: no card inside a card. Do not repeat what a card already draws, or present the same data twice.
 
 ## Entities and evidence
 
-Write visible text, `kind`, fact labels and badges in the conversation's language; field names and enum values stay English. Use real source URLs. Never invent a price, image URL or fact: omit the field or mark the uncertainty in text. An image URL is a reference, not evidence that you inspected it.
+Write visible text, `kind`, fact labels, badges and captions in the conversation's language; field names and enum values stay English. Use real source URLs. Never invent a price, image URL or fact: omit the field or mark the uncertainty. A URL is a reference, not evidence that you inspected it.
+
+An icon, logo, promo banner or store graphic is not a screenshot. Use a real screenshot only when you have its URL; prefer a plain icon or no image over a misleading preview.
 
 ## Local interaction
 

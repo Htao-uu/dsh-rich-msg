@@ -224,6 +224,8 @@ export interface ImageLightboxProps {
   alt: string;
   label?: string;
   initialIndex?: number;
+  /** Optional per-image captions; legacy callers pass URLs only. */
+  captions?: (string | undefined)[];
 }
 /** Caller validates image URLs. Native modal dialog provides background inertness. */
 export function ImageLightbox({
@@ -231,6 +233,7 @@ export function ImageLightbox({
   alt,
   label = "Open gallery",
   initialIndex = 0,
+  captions,
 }: ImageLightboxProps) {
   const [open, setOpen] = useState(false);
   const [index, setIndex] = useState(0);
@@ -372,6 +375,9 @@ export function ImageLightbox({
               />
             )}
           </div>
+          {captions?.[current] && (
+            <p className="ru-primitive-lightbox-caption">{captions[current]}</p>
+          )}
           <div className="ru-primitive-lightbox-controls">
             {src.length > 1 && (
               <button

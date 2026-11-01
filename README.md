@@ -37,6 +37,15 @@ The renderer is a real React tree behind a strict schema. There is no generated 
 
 <p align="center">
   <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/images/apps-desktop-dark.png">
+    <img alt="Software shortlist with wide screenshots on the left, full descriptions and source links on the right, followed by a captioned screenshot gallery" src="docs/images/apps-desktop.png" width="820">
+  </picture>
+  <br>
+  <em><code>entity-list layout:"feature"</code> gives a software shortlist a wide preview, the whole description and its sources. Below it, a captioned gallery shows one screenshot at a time.</em>
+</p>
+
+<p align="center">
+  <picture>
     <source media="(prefers-color-scheme: dark)" srcset="docs/images/dashboard-desktop-dark.png">
     <img alt="Dashboard answer with three KPI cards, a two-series line chart, a sortable, filterable table with status pills and a vertical flow" src="docs/images/dashboard-desktop.png" width="820">
   </picture>
@@ -105,10 +114,10 @@ Things worth trying: *"build a budget calculator with three sliders"*, *"show th
 |---|---|
 | Layout | `stack`, `row`, `grid`, `card`, `divider`, `meta` |
 | Text | `text` with inline `code`, **bold**, links and `[[entityId]]` chips; `callout` with optional title; `code` with syntax colour, language label, line numbers and copy |
-| Objects | `entity-ref`, `entity-list` with poster or square row thumbnails; entity details dock in the native right column or fall back to an in-page drawer, with a two-up photo gallery and cast |
+| Objects | `entity-ref`, `entity-list` in compact or `layout:"feature"` rows, with poster, square or landscape previews; entity details dock in the native right column or fall back to an in-page drawer, with a two-up photo gallery or one captioned screenshot at a time, plus cast |
 | Data | `stat` (KPI card), `progress`, `status`, `table` (sortable, filterable, status and progress columns, scroll hint when it overflows), `chart` (bar / line / area / donut / scatter, 1–6 series, units, tooltips), `computed` |
 | Flow | `diagram` with ordered steps, connector labels and branch depth; `layers` for boxes-inside-boxes architecture with member chips |
-| Media | `image` with caption, `image-group`, `video` and `audio` with native controls, gallery lightbox, popover, tooltip |
+| Media | `image` with caption, `image-group` with optional per-frame captions and an inline `presentation:"gallery"`, `video` and `audio` with native controls, gallery lightbox, popover, tooltip |
 | Controls | `input` (text / number / date), `select`, `slider`, `switch`, `checkbox`, `radio`, `segmented`, `tabs` |
 | Logic | expressions (`add`, `mul`, `round`, comparisons…), `conditional`, local actions, `send-message` |
 
@@ -207,8 +216,8 @@ npm ci
 npm run dev            # lab at http://127.0.0.1:4173, HMR, no Harness needed
 npm run build          # typecheck + lab build
 npm run build:plugin   # the two real bundle artifacts
-npm test               # 203 unit, schema and DOM tests
-npm run test:browser   # 54 Playwright desktop + mobile checks (goldens never auto-update)
+npm test               # 215 unit, schema and DOM tests
+npm run test:browser   # 58 Playwright desktop + mobile checks (goldens never auto-update)
 # Interaction timings: docs/PERFORMANCE.md
 ```
 
@@ -220,7 +229,7 @@ docker run --rm --network host --ipc host --user "$(id -u):$(id -g)" \
   mcr.microsoft.com/playwright:v1.64.1-noble npx playwright test
 ```
 
-Scenarios in the lab: `?demo=dashboard`, `films`, `listing`, `calculator`, `configurator`, `technical`, `primitives`, plus `&theme=dark`.
+Scenarios in the lab: `?demo=dashboard`, `films`, `listing`, `apps`, `calculator`, `configurator`, `technical`, `primitives`, plus `&theme=dark`.
 
 Screenshots in this README are captures of that lab, not mockups. Golden images under `tests/` are regression baselines and say nothing about fidelity to another product.
 

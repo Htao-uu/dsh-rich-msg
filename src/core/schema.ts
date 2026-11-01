@@ -41,6 +41,12 @@ export interface EntityBadge {
   label: string;
   tone?: "success" | "info" | "warning" | "danger" | "accent";
 }
+/** One image with its own accessible text and an optional viewer caption. */
+export interface GalleryImage {
+  src: string;
+  alt: string;
+  caption?: string;
+}
 export interface Entity {
   id: string;
   kind: string;
@@ -48,7 +54,8 @@ export interface Entity {
   subtitle?: string;
   description?: string;
   image?: string;
-  images?: string[];
+  /** Strings stay valid; objects add a caption for the detail gallery. */
+  images?: (string | GalleryImage)[];
   facts?: { label: string; value: Scalar }[];
   /** Key people or characters, shown as a compact photo row in the detail panel. */
   cast?: { name: string; role?: string; image?: string }[];
@@ -56,8 +63,11 @@ export interface Entity {
   related?: string[];
   /** Short highlight under the row, e.g. "Cheapest". */
   badge?: EntityBadge;
-  /** Row thumbnail shape; posters are 2:3, square suits product photos. */
-  thumbShape?: "poster" | "square";
+  /** Gallery mode; `single` shows one captioned image at a time. */
+  galleryLayout?: "paired" | "single";
+  /** Row thumbnail shape; posters are 2:3, square suits product photos and
+   * landscape suits application screenshots. */
+  thumbShape?: "poster" | "square" | "landscape";
 }
 export interface NodeBase {
   id?: string;
@@ -170,6 +180,8 @@ export interface EntityListNode extends NodeBase {
   type: "entity-list";
   /** Ordered references to declared entities; rendered as full-width rows. */
   entityIds: string[];
+  /** `feature` trades density for a wide preview and the full description. */
+  layout?: "compact" | "feature";
 }
 export interface ImageNode extends NodeBase {
   type: "image";
@@ -189,9 +201,15 @@ export interface TooltipNode extends NodeBase {
 }
 export interface ImageGroupNode extends NodeBase {
   type: "image-group";
-  src: string[];
+  /** Legacy form: a set of URLs without captions. Mutually exclusive with items. */
+  src?: string[];
+  /** Captioned form. Mutually exclusive with src. */
+  items?: GalleryImage[];
+  /** Accessible name for the group and the lightbox heading. */
   alt: string;
   label?: string;
+  /** `button` opens the shared lightbox; `gallery` renders inline with captions. */
+  presentation?: "button" | "gallery";
 }
 export interface CarouselNode extends NodeBase {
   type: "carousel";
@@ -724,6 +742,26 @@ function url(v: unknown): void {
   str(v);
   assertSafeUrl(v);
 }
+/** An entity image is either a bare URL or a captioned object. */
+function galleryImage(v: unknown): void {
+  if (typeof v === "string") {
+    url(v);
+    return;
+  }
+  const item = obj(v);
+  fields(item, ["src", "alt"], ["caption"]);
+  url(item.src);
+  str(item.alt);
+  if (item.caption !== undefined) str(item.caption);
+}
+/** The captioned form used by image-group items; alt is required here. */
+function captionedImage(v: unknown): void {
+  const item = obj(v);
+  fields(item, ["src", "alt"], ["caption"]);
+  url(item.src);
+  str(item.alt);
+  if (item.caption !== undefined) str(item.caption);
+}
 export const OP_ARITY: Readonly<Record<ExprOp, readonly [number, number]>> =
   Object.freeze({
     add: [2, 32],
@@ -850,6 +888,7 @@ export function parseRichSpec(input: unknown): RichSpec {
           "related",
           "badge",
           "thumbShape",
+          "galleryLayout",
         ],
       );
       key(e.id);
@@ -860,7 +899,7 @@ export function parseRichSpec(input: unknown): RichSpec {
       for (const k of ["subtitle", "description"])
         if (e[k] !== undefined) str(e[k]);
       if (e.image !== undefined) url(e.image);
-      if (e.images !== undefined) arr(e.images, url);
+      if (e.images !== undefined) arr(e.images, galleryImage);
       if (e.facts !== undefined)
         arr(e.facts, (f) => {
           const x = obj(f);
@@ -897,7 +936,9 @@ export function parseRichSpec(input: unknown): RichSpec {
           ]);
       }
       if (e.thumbShape !== undefined)
-        choice(e.thumbShape, ["poster", "square"]);
+        choice(e.thumbShape, ["poster", "square", "landscape"]);
+      if (e.galleryLayout !== undefined)
+        choice(e.galleryLayout, ["paired", "single"]);
       if (e.related !== undefined)
         arr(e.related, (r) => {
           key(r);
@@ -988,12 +1029,27 @@ export function parseRichSpec(input: unknown): RichSpec {
         if (o.caption !== undefined) str(o.caption);
         break;
       }
-      case "image-group":
-        check(["src", "alt"], ["label"]);
-        arr(o.src, url);
+      case "image-group": {
+        check([], ["src", "alt", "items", "label", "presentation"]);
         str(o.alt);
+        const hasSrc = o.src !== undefined;
+        const hasItems = o.items !== undefined;
+        if (hasSrc === hasItems)
+          fail("Image group needs exactly one of src or items");
+        if (hasSrc) {
+          if (!Array.isArray(o.src) || o.src.length === 0)
+            fail("Image group cannot be empty");
+          arr(o.src, url);
+        } else {
+          if (!Array.isArray(o.items) || o.items.length === 0)
+            fail("Image group cannot be empty");
+          arr(o.items, captionedImage);
+        }
         if (o.label !== undefined) str(o.label);
+        if (o.presentation !== undefined)
+          choice(o.presentation, ["button", "gallery"]);
         break;
+      }
       case "carousel":
         check(["children"]);
         arr(o.children, node);
@@ -1137,13 +1193,14 @@ export function parseRichSpec(input: unknown): RichSpec {
         break;
       }
       case "entity-list": {
-        check(["entityIds"]);
+        check(["entityIds"], ["layout"]);
         if (!Array.isArray(o.entityIds) || o.entityIds.length === 0)
           fail("Entity list cannot be empty");
         arr(o.entityIds, (value) => {
           key(value);
           refs.push(value as string);
         });
+        if (o.layout !== undefined) choice(o.layout, ["compact", "feature"]);
         break;
       }
       case "image":

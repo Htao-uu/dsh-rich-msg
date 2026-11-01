@@ -19,6 +19,7 @@ import { DiagnosticDemo } from "./demo/DiagnosticDemo";
 type LabDemo = DemoName | "primitives" | "diagnostic";
 const labels: Record<LabDemo, string> = {
   dashboard: "Dashboard and metrics",
+  apps: "App shortlist",
   technical: "Technical breakdown",
   films: "Film picks",
   listing: "Product listing",

@@ -1510,3 +1510,221 @@ describe("wide table affordance", () => {
     }
   });
 });
+
+describe("spacious entity rows", () => {
+  const base: RichSpec = {
+    version: 1,
+    entities: [
+      {
+        id: "krita",
+        kind: "Painting",
+        title: "Krita",
+        subtitle: "Painting and animation",
+        description:
+          "Brush engines, wrap-around painting and a frame-by-frame timeline for animation work.",
+        thumbShape: "landscape",
+        galleryLayout: "single",
+        image: "https://example.org/krita.png",
+        images: [
+          {
+            src: "https://example.org/krita.png",
+            alt: "Krita workspace",
+            caption: "The main window.",
+          },
+          {
+            src: "https://example.org/krita-brushes.png",
+            alt: "Brush presets",
+            caption: "Brush settings.",
+          },
+        ],
+        badge: { label: "Best for drawing", tone: "success" },
+        sources: [{ title: "krita.org", url: "https://krita.org/" }],
+      },
+    ],
+    nodes: [{ type: "entity-list", entityIds: ["krita"], layout: "feature" }],
+  };
+
+  it("shows the wide preview, the whole description and its sources", () => {
+    act(() => root.render(<RichResponse spec={base} />));
+    expect(host.querySelector('[data-layout="feature"]')).not.toBeNull();
+    expect(host.querySelector(".ru-feature-media")).not.toBeNull();
+    expect(host.querySelector(".ru-poster-thumb")?.className).toContain(
+      "ru-poster-landscape",
+    );
+    const description = host.querySelector(".ru-feature-description");
+    expect(description?.textContent).toContain("frame-by-frame");
+    expect(description?.className).not.toContain("clamp");
+    const source = host.querySelector(".ru-entity-sources a");
+    expect(source?.getAttribute("href")).toBe("https://krita.org/");
+    // Links must not sit inside the row button.
+    expect(source?.closest("button")).toBeNull();
+  });
+
+  it("opens the detail panel from the title without nesting the links", () => {
+    act(() => root.render(<RichResponse spec={base} />));
+    click(host.querySelector(".ru-feature-title button")!);
+    expect(document.querySelector(".ru-detail h2")?.textContent).toBe("Krita");
+    expect(
+      document.querySelector(".ru-detail .ru-gallery-caption")?.textContent,
+    ).toBe("The main window.");
+    const next = document.querySelector<HTMLButtonElement>(
+      '.ru-detail .ru-gallery-controls button[aria-label="Next image"]',
+    );
+    click(next!);
+    expect(
+      document.querySelector(".ru-detail .ru-gallery-caption")?.textContent,
+    ).toBe("Brush settings.");
+  });
+
+  it("keeps the compact list when no layout is requested", () => {
+    act(() =>
+      root.render(
+        <RichResponse
+          spec={{
+            ...base,
+            nodes: [{ type: "entity-list", entityIds: ["krita"] }],
+          }}
+        />,
+      ),
+    );
+    expect(host.querySelector('[data-layout="compact"]')).not.toBeNull();
+    expect(host.querySelector(".ru-entity-row")).not.toBeNull();
+    expect(host.querySelector(".ru-entity-feature")).toBeNull();
+  });
+});
+
+describe("captioned galleries", () => {
+  it("changes the caption with the frame and stops at the ends", () => {
+    const spec: RichSpec = {
+      version: 1,
+      nodes: [
+        {
+          type: "image-group",
+          presentation: "gallery",
+          alt: "Screens",
+          items: [
+            {
+              src: "https://example.org/a.png",
+              alt: "First",
+              caption: "Main window.",
+            },
+            {
+              src: "https://example.org/b.png",
+              alt: "Second",
+              caption: "Brush settings.",
+            },
+          ],
+        },
+      ],
+    };
+    act(() => root.render(<RichResponse spec={spec} />));
+    expect(host.querySelector(".ru-gallery-caption")?.textContent).toBe(
+      "Main window.",
+    );
+    const [prev, next] = Array.from(
+      host.querySelectorAll<HTMLButtonElement>(".ru-gallery-controls button"),
+    );
+    expect(prev?.disabled).toBe(true);
+    click(next!);
+    expect(host.querySelector(".ru-gallery-caption")?.textContent).toBe(
+      "Brush settings.",
+    );
+    expect(host.querySelector(".ru-gallery-controls output")?.textContent).toBe(
+      "2 / 2",
+    );
+    expect(next?.disabled).toBe(true);
+  });
+
+  it("renders an inline gallery from legacy URLs without captions", () => {
+    act(() =>
+      root.render(
+        <RichResponse
+          spec={{
+            version: 1,
+            nodes: [
+              {
+                type: "image-group",
+                presentation: "gallery",
+                alt: "Legacy screens",
+                src: ["https://example.org/a.png"],
+              },
+            ],
+          }}
+        />,
+      ),
+    );
+    expect(host.querySelector(".ru-gallery-caption")?.textContent).toBe(
+      "Legacy screens — image 1",
+    );
+    expect(host.querySelector(".ru-gallery-controls")).toBeNull();
+  });
+
+  it("keeps the lightbox trigger for the default presentation", () => {
+    Object.defineProperty(HTMLDialogElement.prototype, "showModal", {
+      configurable: true,
+      writable: true,
+      value: vi.fn(),
+    });
+    Object.defineProperty(HTMLDialogElement.prototype, "close", {
+      configurable: true,
+      writable: true,
+      value: vi.fn(),
+    });
+    act(() =>
+      root.render(
+        <RichResponse
+          spec={{
+            version: 1,
+            nodes: [
+              {
+                type: "image-group",
+                alt: "Screens",
+                items: [
+                  {
+                    src: "https://example.org/a.png",
+                    alt: "First",
+                    caption: "Main window.",
+                  },
+                ],
+              },
+            ],
+          }}
+        />,
+      ),
+    );
+    const trigger = host.querySelector(".ru-primitive-trigger");
+    expect(trigger?.textContent).toContain("Open gallery");
+    click(trigger!);
+    expect(
+      document.querySelector(".ru-primitive-lightbox-caption")?.textContent,
+    ).toBe("Main window.");
+  });
+});
+
+describe("feature rows without a preview", () => {
+  it("keeps the text in the only column and still opens the panel", () => {
+    const spec: RichSpec = {
+      version: 1,
+      entities: [
+        {
+          id: "plain",
+          kind: "Tool",
+          title: "Plain tool",
+          description: "No screenshot is available for this one.",
+        },
+      ],
+      nodes: [{ type: "entity-list", entityIds: ["plain"], layout: "feature" }],
+    };
+    act(() => root.render(<RichResponse spec={spec} />));
+    const row = host.querySelector(".ru-entity-feature");
+    expect(row?.getAttribute("data-media")).toBe("none");
+    expect(host.querySelector(".ru-feature-media")).toBeNull();
+    expect(
+      host.querySelector(".ru-feature-description")?.textContent,
+    ).toContain("No screenshot");
+    click(host.querySelector(".ru-feature-title button")!);
+    expect(document.querySelector(".ru-detail h2")?.textContent).toBe(
+      "Plain tool",
+    );
+  });
+});

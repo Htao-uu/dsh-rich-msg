@@ -115,7 +115,7 @@ describe("rich_ui_validate host tool", () => {
     const section = buildSection();
     expect(section).toContain("## Choose the surface");
     expect(section).toContain(
-      "Do not answer a collection with a Markdown table",
+      "Never answer a collection with a Markdown table",
     );
     expect(section).toContain("collections and comparisons by default");
     expect(section).toContain("anime");

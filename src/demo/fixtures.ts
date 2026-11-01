@@ -606,7 +606,7 @@ export const dashboard: RichSpec = {
         {
           id: "ask",
           label: "Request",
-          detail: "\"Build a dashboard\"",
+          detail: '"Build a dashboard"',
         },
         {
           id: "model",
@@ -691,12 +691,135 @@ export const pool: RichSpec = {
   ],
 };
 
+/** Spacious rows for a software shortlist: wide preview, full description,
+ * visible sources. Captioned galleries show one screenshot at a time. */
+export const apps: RichSpec = {
+  version: 1,
+  title: "Linux image editors",
+  nodes: [
+    {
+      type: "text",
+      content:
+        "Three editors worth installing. The previews are real screenshots from Wikimedia Commons, not marketing renders.",
+    },
+    {
+      type: "entity-list",
+      layout: "feature",
+      entityIds: ["krita", "inkscape", "gimp"],
+    },
+    {
+      type: "text",
+      variant: "title",
+      content: "Krita, screen by screen",
+    },
+    {
+      type: "image-group",
+      presentation: "gallery",
+      alt: "Krita interface screenshots",
+      label: "Krita screenshots",
+      items: [
+        {
+          src: "https://thumb.wikimedia.org/wikipedia/commons/thumb/1/15/Krita_5.0.0_screenshot.png/960px-Krita_5.0.0_screenshot.png",
+          alt: "Krita 5 workspace with a canvas and docked panels",
+          caption: "The default workspace: canvas, tool options and dockers.",
+        },
+        {
+          src: "https://thumb.wikimedia.org/wikipedia/commons/thumb/f/f7/Krita_screenshot.png/960px-Krita_screenshot.png",
+          alt: "Krita with a drawing open and the brush preset panel",
+          caption: "Brush presets stay visible while painting.",
+        },
+        {
+          src: "https://thumb.wikimedia.org/wikipedia/commons/thumb/1/12/Krita_4.0_pre-alpha_interface_screenshot_with_kiki.png/960px-Krita_4.0_pre-alpha_interface_screenshot_with_kiki.png",
+          alt: "Krita 4 pre-alpha interface",
+          caption: "An older layout, shown for comparison.",
+        },
+      ],
+    },
+    {
+      type: "callout",
+      tone: "info",
+      title: "Demo",
+      content:
+        "Screenshots are from Wikimedia Commons under free licences and show the real applications.",
+    },
+  ],
+  entities: [
+    {
+      id: "krita",
+      kind: "Painting",
+      title: "Krita",
+      subtitle: "Digital painting and 2D animation",
+      thumbShape: "landscape",
+      galleryLayout: "single",
+      description:
+        "Built for painting rather than photo retouching: brush engines, wrap-around mode, a frame-by-frame animation timeline and a comic-panel workflow. Large documents stay responsive because the brush engine is multithreaded.",
+      badge: { label: "Best for drawing", tone: "success" },
+      image:
+        "https://thumb.wikimedia.org/wikipedia/commons/thumb/1/15/Krita_5.0.0_screenshot.png/960px-Krita_5.0.0_screenshot.png",
+      images: [
+        {
+          src: "https://thumb.wikimedia.org/wikipedia/commons/thumb/1/15/Krita_5.0.0_screenshot.png/960px-Krita_5.0.0_screenshot.png",
+          alt: "Krita 5 workspace",
+          caption: "Workspace with the canvas, tool options and dockers.",
+        },
+        {
+          src: "https://thumb.wikimedia.org/wikipedia/commons/thumb/f/f7/Krita_screenshot.png/960px-Krita_screenshot.png",
+          alt: "Krita canvas with brush presets",
+          caption: "Brush presets docked next to the canvas.",
+        },
+        {
+          src: "https://thumb.wikimedia.org/wikipedia/commons/thumb/1/12/Krita_4.0_pre-alpha_interface_screenshot_with_kiki.png/960px-Krita_4.0_pre-alpha_interface_screenshot_with_kiki.png",
+          alt: "Krita 4 pre-alpha",
+          caption: "An older interface, kept for comparison.",
+        },
+      ],
+      facts: [
+        { label: "Licence", value: "GPL-3.0" },
+        { label: "Formats", value: "KRA, PSD, PNG, EXR" },
+      ],
+      sources: [
+        {
+          title: "krita.org",
+          url: "https://krita.org/",
+        },
+        {
+          title: "Screenshots · Wikimedia Commons",
+          url: "https://commons.wikimedia.org/wiki/Category:Screenshots_of_Krita",
+        },
+      ],
+    },
+    {
+      id: "inkscape",
+      kind: "Vector",
+      title: "Inkscape",
+      subtitle: "SVG editing with a real node editor",
+      thumbShape: "landscape",
+      description:
+        "The reference open-source SVG editor. Path effects, live booleans and a capable text tool cover diagrams and print work; the interface is dense, but every panel is dockable.",
+      image:
+        "https://thumb.wikimedia.org/wikipedia/commons/thumb/d/dd/Screenshot_of_Inkscape_01.png/960px-Screenshot_of_Inkscape_01.png",
+      sources: [{ title: "inkscape.org", url: "https://inkscape.org/" }],
+    },
+    {
+      id: "gimp",
+      kind: "Raster",
+      title: "GIMP",
+      subtitle: "Photo retouching and compositing",
+      thumbShape: "landscape",
+      description:
+        "Single-window mode finally keeps every dialog in one frame. Non-destructive editing is still limited compared with Photoshop, but scripting and plugin coverage are wide.",
+      image:
+        "https://thumb.wikimedia.org/wikipedia/commons/thumb/9/96/Screenshot_of_GIMP_in_single_window_mode.png/960px-Screenshot_of_GIMP_in_single_window_mode.png",
+      sources: [{ title: "gimp.org", url: "https://www.gimp.org/" }],
+    },
+  ],
+};
 
-
-
+export type DemoName = keyof typeof demos;
 
 export const demos = {
   dashboard,
+  apps,
   technical,
   films,
   listing,
@@ -704,4 +827,3 @@ export const demos = {
   configurator,
   pool,
 };
-export type DemoName = keyof typeof demos;

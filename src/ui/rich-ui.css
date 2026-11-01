@@ -2870,3 +2870,227 @@ button.ru-inline-entity:hover {
   cursor: pointer;
   transition: r 90ms ease;
 }
+
+/* Landscape thumbnails ----------------------------------------------------
+   Application screenshots are wide; a 2:3 poster frame shrinks them into a
+   strip. The shape is opt-in, so existing posters and squares keep their size. */
+.ru-poster-thumb.ru-poster-landscape {
+  width: 92px;
+  height: 69px;
+}
+.ru-image-fallback.ru-poster-thumb.ru-poster-landscape {
+  width: 92px;
+  height: 69px;
+}
+
+/* Feature entity list -----------------------------------------------------
+   A wide preview, the whole description and visible sources: enough to judge a
+   software shortlist without opening every panel. The compact list above is
+   untouched, so older documents render exactly as before. */
+.ru-entity-rows[data-layout="feature"] {
+  container-type: inline-size;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  overflow: visible;
+}
+.ru-entity-rows[data-layout="feature"] > li + li {
+  border-top: 1px solid var(--ru-border);
+}
+.ru-entity-feature {
+  display: grid;
+  grid-template-columns: 208px minmax(0, 1fr);
+  gap: 20px;
+  align-items: start;
+  padding: 18px 0;
+}
+.ru-entity-feature[data-shape="poster"] {
+  grid-template-columns: 150px minmax(0, 1fr);
+}
+/* Without a preview the text must not inherit the empty 208px column. */
+.ru-entity-feature[data-media="none"] {
+  grid-template-columns: minmax(0, 1fr);
+}
+.ru-feature-media {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: 1px solid var(--ru-border);
+  border-radius: 10px;
+  background: var(--ru-surface);
+  overflow: hidden;
+  cursor: pointer;
+}
+.ru-feature-media-landscape {
+  aspect-ratio: 4 / 3;
+}
+.ru-feature-media-poster {
+  aspect-ratio: 2 / 3;
+}
+.ru-feature-media-square {
+  aspect-ratio: 1 / 1;
+}
+.ru-feature-media .ru-poster-thumb {
+  width: 100%;
+  height: 100%;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+.ru-feature-media .ru-image-fallback {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  padding: 8px;
+  border: 0;
+  border-radius: 0;
+}
+.ru-feature-media:focus-visible {
+  outline: 2px solid var(--ru-accent);
+  outline-offset: 2px;
+}
+.ru-feature-body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+.ru-feature-title {
+  margin: 0;
+  font-size: 18px;
+  line-height: 1.3;
+  font-weight: 650;
+  color: var(--ru-ink);
+}
+.ru-feature-title button {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.ru-feature-title button:hover {
+  text-decoration: underline;
+}
+.ru-feature-title button:focus-visible {
+  outline: 2px solid var(--ru-accent);
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+.ru-feature-subtitle {
+  margin: 0;
+  font-size: 13px;
+  color: var(--ru-caption-ink);
+}
+.ru-feature-description {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--ru-ink-soft);
+}
+.ru-entity-sources {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  margin-top: 2px;
+}
+.ru-entity-sources a {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12.5px;
+  color: var(--ru-accent);
+  text-decoration: none;
+}
+.ru-entity-sources a:hover {
+  text-decoration: underline;
+}
+@container (max-width: 620px) {
+  .ru-entity-feature,
+  .ru-entity-feature[data-shape="poster"] {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 12px;
+  }
+  .ru-entity-feature[data-shape="poster"] .ru-feature-media {
+    max-width: 150px;
+  }
+  .ru-feature-media-square {
+    max-width: 160px;
+  }
+}
+
+/* Captioned gallery -------------------------------------------------------
+   One frame at a time with its own caption. The frame keeps a fixed shape so
+   changing pictures never reflows the text below. */
+.ru-gallery {
+  margin: 0;
+  max-width: 720px;
+}
+.ru-gallery-frame {
+  display: grid;
+  place-items: center;
+  aspect-ratio: 16 / 10;
+  background: var(--ru-surface);
+  border: 1px solid var(--ru-border);
+  border-radius: 12px;
+  overflow: hidden;
+}
+.ru-gallery-photo {
+  max-width: 100%;
+  max-height: 100%;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+}
+.ru-gallery-frame .ru-image-fallback {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+}
+.ru-gallery-caption {
+  margin-top: 8px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--ru-caption-ink);
+}
+.ru-gallery-controls {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 8px;
+}
+.ru-gallery-controls button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid var(--ru-border);
+  border-radius: 999px;
+  background: var(--ru-bg);
+  color: var(--ru-ink);
+  cursor: pointer;
+}
+.ru-gallery-controls button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.ru-gallery-controls output {
+  font-size: 12px;
+  color: var(--ru-caption-ink);
+  font-variant-numeric: tabular-nums;
+}
+.ru-detail-figure {
+  margin: 0;
+  min-width: 0;
+}
+.ru-detail-figure figcaption {
+  padding: 6px 2px 0;
+  font-size: 12px;
+  color: var(--ru-muted);
+  line-height: 1.45;
+}

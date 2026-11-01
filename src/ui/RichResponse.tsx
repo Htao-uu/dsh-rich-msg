@@ -17,6 +17,7 @@ import {
   stateValueFits,
   type Entity,
   type Expr,
+  type GalleryImage,
   type RadioNode,
   type RichAction,
   type RichNode,
@@ -31,6 +32,8 @@ import {
   savePersistedState,
 } from "./persistence";
 import { ImageLightbox, Popover, Tooltip } from "./primitives";
+import { InlineGallery } from "./Gallery";
+import { EntityList } from "./EntityList";
 import { Inline } from "./inline";
 import { EntityDetails } from "./EntityDetails";
 import { Picture } from "./Picture";
@@ -316,10 +319,25 @@ export function RichResponse({
               </button>
             </Tooltip>
           );
-        case "image-group":
-          return (
-            <ImageLightbox key={key} src={n.src} alt={n.alt} label={n.label} />
+        case "image-group": {
+          const pictures: GalleryImage[] = n.items?.length
+            ? n.items
+            : (n.src ?? []).map((src, index) => ({
+                src,
+                alt: `${n.alt} — image ${index + 1}`,
+              }));
+          return n.presentation === "gallery" ? (
+            <InlineGallery key={key} images={pictures} label={n.label} />
+          ) : (
+            <ImageLightbox
+              key={key}
+              src={pictures.map((picture) => picture.src)}
+              captions={pictures.map((picture) => picture.caption)}
+              alt={n.alt}
+              label={n.label}
+            />
           );
+        }
         case "text":
           return (
             <div key={key} className={`ru-text ru-${n.variant ?? "body"}`}>
@@ -404,7 +422,7 @@ export function RichResponse({
           );
         case "entity-list":
           return (
-            <EntityRows
+            <EntityList
               key={key}
               node={n}
               entities={spec.entities ?? []}
@@ -664,66 +682,6 @@ export function RichResponse({
         />
       )}
     </section>
-  );
-}
-
-/** Full-width entity rows: compact poster, metadata, chevron. Mirrors the reference layout. */
-function EntityRows({
-  node,
-  entities: pool,
-  onOpen,
-}: {
-  node: Extract<RichNode, { type: "entity-list" }>;
-  entities: Entity[];
-  onOpen: (id: string) => void;
-}) {
-  const entities = node.entityIds
-    .map((id) => pool.find((entry) => entry.id === id))
-    .filter((entry): entry is Entity => Boolean(entry));
-  if (entities.length === 0) return null;
-  return (
-    <ul className="ru-entity-rows">
-      {entities.map((entity) => (
-        <li key={entity.id}>
-          <button
-            type="button"
-            className="ru-entity-row"
-            onClick={() => onOpen(entity.id)}
-            aria-label={`Details: ${entity.title}`}
-          >
-            {entity.image && (
-              <Picture
-                src={entity.image}
-                alt=""
-                className={`ru-poster-thumb${
-                  entity.thumbShape === "square" ? " ru-poster-square" : ""
-                }`}
-              />
-            )}
-            <span className="ru-entity-row-meta">
-              <span className="ru-eyebrow">{entity.kind}</span>
-              <strong>{entity.title}</strong>
-              {entity.subtitle && <span>{entity.subtitle}</span>}
-              {entity.description && (
-                <span className="ru-entity-row-description">
-                  {entity.description}
-                </span>
-              )}
-              {entity.badge && (
-                <span
-                  className="ru-entity-badge"
-                  data-tone={entity.badge.tone ?? "success"}
-                >
-                  <Check size={13} aria-hidden="true" />
-                  {entity.badge.label}
-                </span>
-              )}
-            </span>
-            <ChevronRight size={18} aria-hidden="true" />
-          </button>
-        </li>
-      ))}
-    </ul>
   );
 }
 

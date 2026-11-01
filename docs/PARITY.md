@@ -18,6 +18,8 @@ Reference screenshots and our captures are compared at the same viewport width; 
 | --------------------------------------------------------------------- | ------- | --------------------------------------------------------------------------------- |
 | Technical explanation with icon rows, inline code, divider            | Covered | `technical`; light+dark screenshots; axe clean                                    |
 | Movie collection with rows, posters, detail panel, gallery, related   | Covered | `films`; browser test opens the panel, checks two photos share a row, follows related, restores focus |
+| Software shortlist with wide previews, full text and source links     | Covered | `apps`; compact rows stay the default, `layout:"feature"` adds the wide preview, whole description and sources, and narrow containers stack it above the text |
+| Screenshot gallery with a caption per frame                          | Covered | `apps`; `galleryLayout:"single"` and `image-group presentation:"gallery"`, arrows, counter and per-frame caption; the lightbox keeps its caption too |
 | Marketplace listing: meta strip, price, highlight badge               | Covered | `listing`; meta + badge nodes, schema tests                                       |
 | Local calculator with instant recompute                               | Covered | `calculator`; browser test asserts value and reset                                |
 | Reactive configurator: input, switch, tabs, conditional sections      | Covered | `configurator`; browser test                                                      |

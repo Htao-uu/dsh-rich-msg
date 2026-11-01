@@ -184,7 +184,7 @@ Replace demonstration content with sourced real findings. These JSON blocks are 
 
 ## Supplemental details and an image collection
 
-The URLs here are syntax placeholders, not verified photos or research sources. `tooltip.text` is a plain string; `popover.children` is a node array; `image-group.src` is a URL array.
+The URLs here are syntax placeholders, not verified photos or research sources. `tooltip.text` is a plain string; `popover.children` is a node array; `image-group` takes either a legacy `src` URL array or captioned `items`.
 
 ```json
 {
@@ -438,4 +438,62 @@ Use a scatter for two numeric dimensions, and `video` / `audio` for direct files
  {"type":"video","src":"https://example.com/demo.mp4","title":"Renderer walkthrough","caption":"12 seconds, no sound."},
  {"type":"audio","src":"https://example.com/done.mp3","title":"Turn finished"}
 ]}
+```
+
+## Software shortlist with a wide preview and captioned screens
+
+`layout:"feature"` is for rows the reader must judge visually; the compact list would shrink these screenshots into a strip. `thumbShape:"landscape"` matches the image shape, and `galleryLayout:"single"` gives each screenshot its own caption. The inline `image-group` repeats the same idea inside the answer.
+
+```json
+{
+  "version": 1,
+  "title": "Linux image editors",
+  "entities": [
+    {
+      "id": "krita",
+      "kind": "Painting",
+      "title": "Krita",
+      "subtitle": "Digital painting and 2D animation",
+      "thumbShape": "landscape",
+      "galleryLayout": "single",
+      "image": "https://example.com/krita-workspace.png",
+      "images": [
+        {
+          "src": "https://example.com/krita-workspace.png",
+          "alt": "Krita workspace with docked panels",
+          "caption": "Canvas, tool options and dockers."
+        },
+        {
+          "src": "https://example.com/krita-brushes.png",
+          "alt": "Brush preset panel",
+          "caption": "Brush presets stay visible while painting."
+        }
+      ],
+      "description": "Brush engines, wrap-around mode and a frame-by-frame animation timeline.",
+      "badge": { "label": "Best for drawing", "tone": "success" },
+      "sources": [
+        { "title": "krita.org", "url": "https://krita.org/" }
+      ]
+    }
+  ],
+  "nodes": [
+    {
+      "type": "entity-list",
+      "layout": "feature",
+      "entityIds": ["krita"]
+    },
+    {
+      "type": "image-group",
+      "presentation": "gallery",
+      "alt": "Krita interface screens",
+      "items": [
+        {
+          "src": "https://example.com/krita-workspace.png",
+          "alt": "Krita workspace",
+          "caption": "The default workspace."
+        }
+      ]
+    }
+  ]
+}
 ```

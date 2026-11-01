@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 import type { Entity } from "../core/schema";
 import { formatNumber } from "./blocks/Metrics";
+import { InlineGallery, normalizeGalleryImages } from "./Gallery";
 import { Picture } from "./Picture";
 
 export interface EntityDetailsProps {
@@ -30,19 +31,30 @@ export function EntityDetails({
   titleId,
   titleRef,
 }: EntityDetailsProps) {
-  const [page, setPage] = useState(0);
+  const [rawPage, setPage] = useState(0);
   const fallbackId = useId();
   const id = titleId ?? fallbackId;
   useEffect(() => setPage(0), [entity.id]);
-  const images = entity.images?.length
-    ? entity.images
-    : entity.image
-      ? [entity.image]
-      : [];
+  const sourceKey = normalizeGalleryImages(
+    entity.images?.length ? entity.images : entity.image ? [entity.image] : [],
+    entity.title,
+  )
+    .map((frame) => frame.src)
+    .join("\n");
+  // A streaming document can replace an entity's photos under the same id.
+  useEffect(() => setPage(0), [sourceKey]);
+  const images = normalizeGalleryImages(
+    entity.images?.length ? entity.images : entity.image ? [entity.image] : [],
+    entity.title,
+  );
   // The observed reference shows two portrait photos side by side, with dots
-  // for further pages. One photo keeps the wider single-hero treatment.
-  const perPage = images.length > 1 ? 2 : 1;
+  // for further pages. `single` opts into one captioned frame at a time, which
+  // is what an application screenshot needs: a paired half-width shot is not
+  // readable and its caption has nowhere to go.
+  const single = entity.galleryLayout === "single";
+  const perPage = single ? 1 : images.length > 1 ? 2 : 1;
   const pages = Math.ceil(images.length / perPage);
+  const page = Math.min(rawPage, Math.max(0, pages - 1));
   const first = page * perPage;
   const visible = images.slice(first, first + perPage);
   const related = (entity.related ?? [])
@@ -50,20 +62,28 @@ export function EntityDetails({
     .filter((entry): entry is Entity => Boolean(entry));
   return (
     <>
-      {images.length > 0 && (
+      {single && images.length > 0 && (
+        <InlineGallery images={images} label={entity.title} />
+      )}
+      {!single && images.length > 0 && (
         <div
           className={`ru-detail-gallery${
             visible.length > 1 ? " ru-detail-gallery-pair" : ""
           }`}
         >
           <div className="ru-detail-page">
-            {visible.map((source, index) => (
-              <Picture
-                key={source}
-                src={source}
-                alt={`${entity.title} — image ${first + index + 1}`}
-                className="ru-detail-photo"
-              />
+            {visible.map((frame, index) => (
+              <figure
+                className="ru-detail-figure"
+                key={`${first + index}:${frame.src}`}
+              >
+                <Picture
+                  src={frame.src}
+                  alt={frame.alt}
+                  className="ru-detail-photo"
+                />
+                {frame.caption && <figcaption>{frame.caption}</figcaption>}
+              </figure>
             ))}
           </div>
           {pages > 1 && pages <= 5 && (

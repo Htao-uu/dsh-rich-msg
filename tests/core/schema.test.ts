@@ -1048,3 +1048,126 @@ describe("control value domains", () => {
     ).toBe(false);
   });
 });
+
+describe("media layouts and captions", () => {
+  const spec = (extra: Record<string, unknown>) => ({
+    version: 1,
+    entities: [
+      {
+        id: "app",
+        kind: "App",
+        title: "App",
+        thumbShape: "landscape",
+        galleryLayout: "single",
+        images: [
+          "https://example.org/shot.png",
+          {
+            src: "https://example.org/one.png",
+            alt: "Window one",
+            caption: "The main window.",
+          },
+        ],
+      },
+    ],
+    nodes: [{ type: "entity-list", entityIds: ["app"], layout: "feature" }],
+    ...extra,
+  });
+
+  it("accepts a feature list, landscape thumbnails and captioned images", () => {
+    const parsed = parseRichSpec(spec({}));
+    expect(parsed.nodes[0]).toMatchObject({ layout: "feature" });
+    expect(parsed.entities?.[0]?.thumbShape).toBe("landscape");
+    expect(parsed.entities?.[0]?.galleryLayout).toBe("single");
+    expect(parsed.entities?.[0]?.images).toHaveLength(2);
+  });
+
+  it("keeps documents without the new fields valid", () => {
+    const parsed = parseRichSpec({
+      version: 1,
+      entities: [{ id: "a", kind: "App", title: "App" }],
+      nodes: [{ type: "entity-list", entityIds: ["a"] }],
+    });
+    expect(parsed.entities?.[0]?.thumbShape).toBeUndefined();
+  });
+
+  it("rejects unknown layouts, shapes and gallery modes", () => {
+    for (const node of [
+      { type: "entity-list", entityIds: ["app"], layout: "wide" },
+      { type: "entity-list", entityIds: ["app"], layout: 3 },
+    ])
+      expect(() => parseRichSpec({ ...spec({}), nodes: [node] })).toThrow();
+    for (const entity of [
+      { id: "app", kind: "App", title: "App", thumbShape: "tall" },
+      { id: "app", kind: "App", title: "App", galleryLayout: "grid" },
+    ])
+      expect(() =>
+        parseRichSpec({ version: 1, entities: [entity], nodes: [] }),
+      ).toThrow();
+  });
+
+  it("rejects a malformed captioned image", () => {
+    for (const image of [
+      { src: "https://example.org/a.png" },
+      { alt: "No source" },
+      { src: "javascript:alert(1)", alt: "Unsafe" },
+      { src: "https://example.org/a.png", alt: "A", caption: 4 },
+      { src: "https://example.org/a.png", alt: "A", label: "Unknown" },
+    ])
+      expect(() =>
+        parseRichSpec({
+          version: 1,
+          entities: [{ id: "a", kind: "App", title: "App", images: [image] }],
+          nodes: [],
+        }),
+      ).toThrow();
+  });
+
+  it("accepts captioned image groups and rejects ambiguous forms", () => {
+    const parsed = parseRichSpec({
+      version: 1,
+      nodes: [
+        {
+          type: "image-group",
+          presentation: "gallery",
+          alt: "Screens",
+          label: "App screens",
+          items: [
+            {
+              src: "https://example.org/a.png",
+              alt: "First window",
+              caption: "Main view.",
+            },
+          ],
+        },
+        {
+          type: "image-group",
+          src: ["https://example.org/b.png"],
+          alt: "Legacy",
+        },
+      ],
+    });
+    expect(parsed.nodes).toHaveLength(2);
+    for (const node of [
+      {
+        type: "image-group",
+        src: ["https://example.org/a.png"],
+        items: [{ src: "https://example.org/b.png", alt: "B" }],
+        alt: "Both",
+      },
+      { type: "image-group", alt: "Neither" },
+      { type: "image-group", items: [], alt: "Empty" },
+      {
+        type: "image-group",
+        items: [{ src: "https://example.org/a.png" }],
+        alt: "No alt",
+      },
+      {
+        type: "image-group",
+        src: ["https://example.org/a.png"],
+        alt: "Unsafe mode",
+        presentation: "carousel",
+      },
+    ])
+      expect(() => parseRichSpec({ version: 1, nodes: [node] })).toThrow();
+  });
+});

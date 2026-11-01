@@ -8,6 +8,13 @@ test.beforeEach(async ({ page }) => {
       body: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 560"><defs><linearGradient id="g" x2="1" y2="1"><stop stop-color="#233443"/><stop offset="1" stop-color="#8c9c9a"/></linearGradient></defs><rect width="400" height="560" fill="url(#g)"/><circle cx="200" cy="210" r="90" fill="#d7d3bd" opacity=".4"/><path d="M0 420 L150 320 250 430 400 290V560H0" fill="#172c39"/></svg>',
     }),
   );
+  await page.route("https://thumb.wikimedia.org/**", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "image/svg+xml",
+      body: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 500"><rect width="500" height="500" fill="#dfe3e8"/><rect x="40" y="60" width="420" height="300" rx="24" fill="#c3cad3"/></svg>',
+    }),
+  );
 });
 test("film detail panel opens, navigates related entity, and restores focus", async ({
   page,
@@ -80,6 +87,7 @@ test("all scenarios have no horizontal overflow or runtime errors in both themes
     "dashboard",
     "technical",
     "films",
+    "listing",
     "calculator",
     "configurator",
     "pool",
@@ -144,6 +152,8 @@ test("renderer passes automated accessibility checks", async ({ page }) => {
     "dashboard",
     "technical",
     "films",
+    "listing",
+    "apps",
     "calculator",
     "configurator",
     "pool",
@@ -315,6 +325,97 @@ test("rejected block explains the error and reveals its source", async ({
   await expect(
     page.getByRole("button", { name: "Ask the model to fix" }),
   ).toHaveCount(0);
+});
+
+test("spacious app rows keep their preview, full text and sources", async ({
+  page,
+  isMobile,
+}) => {
+  const shot = (ratio: string) =>
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${ratio}"><rect width="100%" height="100%" fill="#dfe3e8"/><rect x="12" y="12" width="70%" height="10%" fill="#b6bdc6"/><rect x="12" y="30%" width="88%" height="56%" fill="#c8ced6"/></svg>`;
+  await page.route("https://thumb.wikimedia.org/**", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "image/svg+xml",
+      body: shot("960 720"),
+    }),
+  );
+  await page.goto("/?demo=apps");
+  const rows = page.locator(".ru-entity-feature");
+  await expect(rows).toHaveCount(3);
+
+  // On desktop the preview is a real column, not a 52px strip; the narrow
+  // container stacks it above the text and is covered separately below.
+  if (!isMobile) {
+    const mediaBox = (await rows
+      .first()
+      .locator(".ru-feature-media")
+      .boundingBox())!;
+    expect(Math.round(mediaBox.width)).toBe(208);
+    expect(Math.round(mediaBox.height)).toBe(156);
+  }
+
+  // Sources are links, and they do not live inside the detail button.
+  const source = rows.first().locator(".ru-entity-sources a").first();
+  await expect(source).toHaveAttribute("href", "https://krita.org/");
+  expect(await source.evaluate((node) => node.closest("button"))).toBeNull();
+
+  // The full description is present; the compact list clamps to two lines.
+  const description = rows.first().locator(".ru-feature-description");
+  expect(
+    await description.evaluate(
+      (node) => node.scrollHeight <= node.clientHeight + 1,
+    ),
+  ).toBeTruthy();
+
+  // The inline gallery in the answer changes its caption with the frame.
+  const inline = page.locator(".ru-response-body .ru-gallery");
+  await expect(inline.locator(".ru-gallery-caption")).toHaveText(
+    "The default workspace: canvas, tool options and dockers.",
+  );
+  await inline.getByRole("button", { name: "Next image" }).click();
+  await expect(inline.locator(".ru-gallery-caption")).toHaveText(
+    "Brush presets stay visible while painting.",
+  );
+
+  // Opening the title shows one captioned screenshot at a time in the panel.
+  await rows.first().locator(".ru-feature-title button").click();
+  const dialog = page.locator(".ru-detail");
+  await expect(dialog.getByRole("heading", { name: "Krita" })).toBeVisible();
+  await expect(dialog.locator(".ru-gallery-caption")).toHaveText(
+    "Workspace with the canvas, tool options and dockers.",
+  );
+  await dialog.getByRole("button", { name: "Next image" }).click();
+  await expect(dialog.locator(".ru-gallery-caption")).toHaveText(
+    "Brush presets docked next to the canvas.",
+  );
+  await expect(dialog.locator(".ru-gallery-controls output")).toHaveText(
+    "2 / 3",
+  );
+});
+
+test("spacious rows stack the preview above the text in a narrow container", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 900 });
+  await page.route("https://thumb.wikimedia.org/**", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "image/svg+xml",
+      body: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 720"><rect width="960" height="720" fill="#dfe3e8"/></svg>',
+    }),
+  );
+  await page.goto("/?demo=apps");
+  const row = page.locator(".ru-entity-feature").first();
+  const media = await row.locator(".ru-feature-media").boundingBox();
+  const body = await row.locator(".ru-feature-body").boundingBox();
+  expect(media!.width).toBeGreaterThan(300);
+  expect(body!.y).toBeGreaterThan(media!.y + media!.height - 1);
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth,
+    ),
+  ).toBeTruthy();
 });
 
 test("progress columns expose values and product rows use square thumbnails", async ({

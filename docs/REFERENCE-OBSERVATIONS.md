@@ -29,3 +29,9 @@ The same shared conversation (source B) loaded its entity panel anonymously at 2
 - The panel is visually part of the app shell: a thin left border, no floating card shadow, and no rounded outer container.
 
 This is one observed state, not a full component specification. Mobile geometry, dark theme, keyboard focus order and the gallery's full swipe behaviour were not captured. The detail gallery now follows that observation: two portrait photos share the row and further pages use dots. The remaining visible difference is the detail surface: it is modal on narrow screens, while the reference keeps a right-edge panel.
+
+## Spacious rows for software shortlists (2026-11-01)
+
+A reader-supplied ChatGPT capture showed a different row shape from the film collection: a wide preview roughly a quarter of the row width, the whole description, a visible source link, thin separators and no heavy shared container. The screenshot's browser zoom is unknown, so the proportions are a direction, not measurements.
+
+Implemented as an opt-in `entity-list layout:"feature"`, leaving the observed compact row as the default. Landscape previews and captions were added on the same evidence: a wide screenshot inside a 2:3 poster frame, and a half-width paired photo inside a detail panel, are both unreadable.
