@@ -3,10 +3,17 @@ import { Check, ChevronRight, ExternalLink } from "lucide-react";
 import type { Entity, RichNode } from "../core/schema";
 import { Picture } from "./Picture";
 
-/** Row thumbnail shape; `poster` stays the default so old documents are stable. */
-function thumbClass(entity: Entity): string {
-  const shape = entity.thumbShape ?? "poster";
-  return `ru-poster-thumb ru-poster-${shape}`;
+/**
+ * Row thumbnail shape. Compact rows keep the poster default so old documents
+ * are stable; a feature row exists to show the thing itself, so its default is
+ * the wide frame a screenshot needs. An explicit thumbShape always wins.
+ */
+function shapeOf(entity: Entity, layout: "compact" | "feature"): string {
+  return entity.thumbShape ?? (layout === "feature" ? "landscape" : "poster");
+}
+
+function thumbClass(entity: Entity, layout: "compact" | "feature"): string {
+  return `ru-poster-thumb ru-poster-${shapeOf(entity, layout)}`;
 }
 
 function Badge({ entity }: { entity: Entity }) {
@@ -68,7 +75,7 @@ export function EntityList({
           <li
             key={entity.id}
             className="ru-entity-feature"
-            data-shape={entity.thumbShape ?? "poster"}
+            data-shape={shapeOf(entity, "feature")}
             data-media={entity.image ? "image" : "none"}
           >
             {entity.image && (
@@ -83,7 +90,7 @@ export function EntityList({
                 <Picture
                   src={entity.image}
                   alt=""
-                  className={thumbClass(entity)}
+                  className={thumbClass(entity, "feature")}
                 />
               </button>
             )}
@@ -121,7 +128,7 @@ export function EntityList({
               <Picture
                 src={entity.image}
                 alt=""
-                className={thumbClass(entity)}
+                className={thumbClass(entity, "compact")}
               />
             )}
             <span className="ru-entity-row-meta">

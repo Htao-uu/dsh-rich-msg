@@ -1,6 +1,6 @@
 {
   "name": "@kyoukisu/dsh-rich-ui",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "description": "ChatGPT-style rich answers inside DeepSeek Harness: entity panels, KPI cards, charts, tables, layers and local controls.",
   "license": "MIT",
   "type": "module",

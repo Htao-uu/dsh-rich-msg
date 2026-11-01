@@ -1728,3 +1728,72 @@ describe("feature rows without a preview", () => {
     );
   });
 });
+
+describe("preview shape defaults", () => {
+  const entity = (
+    extra: Partial<
+      RichSpec["entities"] extends (infer E)[] | undefined ? E : never
+    >,
+  ) => ({
+    id: "app",
+    kind: "App",
+    title: "App",
+    image: "https://example.org/app.png",
+    ...extra,
+  });
+
+  it("defaults a feature row to the wide frame and a compact row to the poster", () => {
+    act(() =>
+      root.render(
+        <RichResponse
+          spec={{
+            version: 1,
+            entities: [entity({})],
+            nodes: [
+              { type: "entity-list", entityIds: ["app"], layout: "feature" },
+            ],
+          }}
+        />,
+      ),
+    );
+    expect(host.querySelector(".ru-poster-thumb")?.className).toContain(
+      "ru-poster-landscape",
+    );
+    act(() =>
+      root.render(
+        <RichResponse
+          spec={{
+            version: 1,
+            entities: [entity({})],
+            nodes: [{ type: "entity-list", entityIds: ["app"] }],
+          }}
+        />,
+      ),
+    );
+    expect(host.querySelector(".ru-poster-thumb")?.className).toContain(
+      "ru-poster-poster",
+    );
+  });
+
+  it("honours an explicit poster shape inside a feature row", () => {
+    act(() =>
+      root.render(
+        <RichResponse
+          spec={{
+            version: 1,
+            entities: [entity({ thumbShape: "poster" })],
+            nodes: [
+              { type: "entity-list", entityIds: ["app"], layout: "feature" },
+            ],
+          }}
+        />,
+      ),
+    );
+    expect(host.querySelector(".ru-poster-thumb")?.className).toContain(
+      "ru-poster-poster",
+    );
+    expect(host.querySelector(".ru-feature-media")?.className).toContain(
+      "ru-feature-media-poster",
+    );
+  });
+});
