@@ -106,7 +106,6 @@ dsh-rich-msg
 
 详细数据流与验证方法见 [docs/TOOL-BRIDGE.md](docs/TOOL-BRIDGE.md)。
 
----
 
 ## 支持的能力
 
