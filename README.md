@@ -24,13 +24,6 @@
 5. **安全默认**：声明式 JSON、无 HTML/JS 执行、无 eval、URL 白名单、Action 白名单、大小/深度/数量限制、Session 隔离。
 6. **可卸载、可重挂载**：所有 React root、样式、监听器、路由、缓存都有明确的生命周期。
 
-## 它不负责什么
-
-- 不决定模型应该如何思考、回答、教学或组织内容。
-- 不注册任何 prompt 段落、Persona、Skill 或 Agent 预设。
-- 不通过工具描述夹带 UI 使用策略。
-- 不替使用者选择模型、语气或教学策略。
-
 ---
 
 ## 架构
@@ -137,45 +130,6 @@ dsh-rich-msg
 
 工具描述只说明输入、输出与副作用，不包含任何"何时应该使用"的行为指导。
 
-## 安装
-
-### 方式一：本地 link（开发）
-
-```powershell
-# 1) 构建
-node scripts/build.mjs
-
-# 2) 在 %USERPROFILE%.dshprofiles<name>package.json 中声明（示例）
-#    {
-#      "name": "dsh-profile-richmsg",
-#      "private": true,
-#      "dependencies": { "dsh-rich-msg": "link:E:/path/to/dsh-rich-msg" },
-#      "dsh": { "profile": { "bundles": ["@deepseek-ai/dsh-base", "@deepseek-ai/dsh-web-app", "dsh-rich-msg"] } }
-#    }
-#    并在该 profile 的 node_modules 下建立指向本目录的 junction/symlink。
-
-# 3) 启动该 profile
-node <dsh>/lib/bin.js --profile <name> --host 127.0.0.1 --port 58470 --no-open
-```
-
-### 方式二：作为依赖安装
-
-把本包发布/复制到可解析的位置后，在 profile 的 `package.json` 中：
-
-```json
-{
-  "dependencies": { "dsh-rich-msg": "link:E:/path/to/dsh-rich-msg" },
-  "dsh": { "profile": { "bundles": ["@deepseek-ai/dsh-base", "@deepseek-ai/dsh-web-app", "dsh-rich-msg"] } }
-}
-```
-
-```powershell
-dsh plugin --profile <profile> add link:E:/path/to/dsh-rich-msg
-# 并把 "dsh-rich-msg" 加入 dsh.profile.bundles
-```
-
-> 新增/替换包后需要重启宿主进程；客户端资源会按 boot revision 重新生成。
-
 ## 主题
 
 - 全部颜色/字体/圆角/阴影来自 DSH 的 `--dsw-*` 令牌；
@@ -185,71 +139,9 @@ dsh plugin --profile <profile> add link:E:/path/to/dsh-rich-msg
 
 详见 [docs/THEME.md](docs/THEME.md)。
 
-## 安全
-
-- 只接受声明式 JSON；
-- 拒绝 `__proto__` / `constructor` / `prototype` 键，防原型污染；
-- 文档大小、嵌套深度、数组长度、组件数量、字符串长度全部有上限；
-- URL 仅允许 http(s)，禁止内嵌凭据与危险协议；
-- Action 事件白名单校验；交互只由用户触发；
-- 富内容不能直接调用任意 DSH 工具；
-- Artifact 按 Session 隔离，跨 Session 查询与不存在等价；
-- 日志不写入文档内容或表单值。
-
-详见 [docs/SECURITY.md](docs/SECURITY.md)。
-
-## 兼容性与已验证范围
-
-- 目标宿主：`@deepseek-ai/dsh@0.2.2-alpha.2`（本机 `E:\tools\dsh-cli`）。
-- Fence 发现依赖宿主 DOM 标记（`data-chat-flow-kind`、`data-code-block-content` 等）。宿主升级后需重新验证；标记变化时渲染器**失败关闭**（保留原生代码块）。
-- 最终消息判定依赖 Chat Snapshot（`uiConversation`）。该服务不可用时退化为保守的 DOM 规则（仅已稳定的 assistant 行，且不预览流式内容），并在文档中明确记录这一降级。
-- **已验证**：13 个测试文件 / 210 项单元与集成测试通过；`tsc --noEmit` 0 错误；隔离 profile 下真实 DSH 宿主加载与 DOM 冒烟验证通过（插件加载、模块分发、Fence 渲染、普通代码/工具行/流式行不接管、卸载还原、零控制台错误、浅色/深色/390px 截图）。
-- **未验证（待人工）**：真实模型对话下的 Fence 通道与 Tool Bridge 引用渲染。自动化 CDP 发送消息未打通，已按交付要求停止；请按 [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) 第 5.3 节清单在真实 DSH 中人工验证。
-
 ## 上游项目与许可证
 
 - 本项目基于 **kyoukisu/dsh-rich-ui**（MIT）的源码进行独立开发与重构：保留了其成熟的 RichSpec Schema、表达式求值器、React 组件与视觉实现，重写了宿主集成、消息判定、工具桥接、主题桥接与文档，并移除了运行时 Prompt 注入。
 - 上游版权声明保留在 [LICENSE](LICENSE)（MIT, Copyright (c) 2026 kyoukisu）。
 - 图标来自 [lucide-react](https://lucide.dev)（ISC），详见 [docs/THIRD-PARTY.md](docs/THIRD-PARTY.md)。
 - 本项目与上游作者无隶属、合作或背书关系；名称 `dsh-rich-msg` 用于区分衍生项目。
-
-## 变更报告
-
-| 模块 | 上游原有能力 | 本次修改 | 修改原因 |
-|---|---|---|---|
-| Prompt | 通过 `inject: ["systemPrompt"]` 注册 `rich-ui:fence` 段落，构建行为指令并注入每次请求 | **完全移除**运行时注入；删除 `prompt-rich-ui/` 运行时文件；技术内容改为离线文档 | 保持模型行为中立 |
-| Validator | `rich_ui_validate` 工具，描述含"默认使用/优先"等行为指导 | 保留校验能力，改名为 `rich_msg_validate`，描述仅含参数、返回与副作用 | 工具 API 保持纯技术性 |
-| Tool | 仅校验，无状态 | 新增 `rich_msg_publish` + 会话作用域 Artifact Store + 只读读取路由 | 支持 Tool 输出通道 |
-| Fence | DOM MutationObserver 扫描 `rich-ui` 围栏，仅以 assistant-step 祖先判定 | 保留扫描技术；新增 Chat Snapshot 最终性判定、推理排除、流式回撤、引用解析、稳定重挂载 | 只渲染最终回答，不误渲染推理/工具阶段 |
-| Renderer | RichSpec React 组件体系 | 复用全部组件；命名空间改为 `dsh-rich-msg`；保留既有可访问性修复 | 降低改造成本 |
-| Theme | 自带配色 + 部分 DSH token 桥接 | 新增完整桥接层（明/暗/移动端），统一映射 `--dsw-*` | Hybrid 视觉要求 |
-| Actions | `[rich-ui-action]` 用户消息 | 改为 `[rich-msg-action]`，保留白名单、大小上限、会话捕获 | 品牌统一与安全 |
-| Build | Vite + tsc + 独立 demo | esbuild 双产物（Host ESM / Client ModuleLoader bundle），无需 Vite 运行时 | 简化构建、与宿主加载协议对齐 |
-| Tests | vitest 单测 + Playwright 截图 | 保留并扩充为 13 文件 / 210 项单测与集成测试；新增真实宿主 DOM 冒烟脚本；真实模型 E2E 改为人工验证 | 可复现、不虚构验证 |
-| Docs | 上游内部文档 + 运行时 prompt 文件 | 重写为 7 份技术文档，且明确不得成为运行时 prompt | 交付要求 |
-
-完整说明见 [docs/CHANGES.md](docs/CHANGES.md)。
-
-## 开发
-
-```powershell
-node scripts/build.mjs               # 构建 lib/index.js 与 lib/client.js
-npx tsc --noEmit                     # 类型检查
-npx vitest run                       # 单元 + 集成测试
-node scripts/package.mjs             # 打包 dist/*.zip + sha256
-```
-
-详见 [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)。
-
-## 目录
-
-```
-src/core        协议与求值
-src/host        Node 插件：工具、Artifact Store、读取路由
-src/client      浏览器插件：Fence 渲染、消息判定、引用解析、交互回传
-src/ui          React Renderer 与样式
-src/shared      双端共享协议常量
-tests           单元与集成测试
-scripts         构建与真实宿主验证脚本
-docs            技术文档
-```
