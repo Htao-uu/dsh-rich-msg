@@ -1,0 +1,107 @@
+/*
+ * dsh-rich-msg host theme bridge.
+ *
+ * Loaded after the upstream rich-ui stylesheet. Every value here maps a DSH
+ * theme token onto the renderer's own `--ru-*` variables, so the surfaces adopt
+ * the host palette, typography and radii in both schemes without copying any
+ * product-specific colour. Components keep their own layout; colours, fonts,
+ * borders and shadows follow the host.
+ *
+ * Dark mode follows DSH's own marker attribute (`data-ds-dark-theme`, set on
+ * body or html depending on the shell) and also accepts upstream's
+ * `data-theme="dark"`. Nothing is hard-coded to one palette.
+ */
+
+[data-rich-msg-root] .rich-ui {
+  --ru-bg: var(--dsw-alias-bg-layer-1, #ffffff);
+  --ru-elevated: var(--dsw-alias-bg-layer-1, #ffffff);
+  --ru-surface: var(--dsw-alias-bg-layer-2, #f6f6f7);
+  --ru-surface-2: var(--dsw-alias-bg-layer-3, #ececee);
+  --ru-ink: var(--dsw-alias-label-primary, #171717);
+  --ru-ink-soft: var(--dsw-alias-label-secondary, #3a3a3a);
+  --ru-muted: var(--dsw-alias-label-tertiary, #6b6b6b);
+  --ru-faint: var(--dsw-alias-label-caption, #6e6e6e);
+  --ru-caption-ink: var(--dsw-alias-label-caption, #5c5c60);
+  --ru-border: var(--dsw-alias-border-l1, #e4e4e6);
+  --ru-border-strong: var(--dsw-alias-border-l2, #d3d3d6);
+  --ru-grid: var(--dsw-alias-border-l1, #ededee);
+  --ru-accent: var(--dsw-alias-state-business-primary, #1f7a63);
+  --ru-accent-ink: var(--dsw-alias-label-primary-foreground, #ffffff);
+  --ru-accent-soft: color-mix(in srgb, var(--dsw-alias-state-business-primary, #1f7a63) 12%, transparent);
+  --ru-success: var(--dsw-alias-state-success-primary, #177a4f);
+  --ru-success-soft: color-mix(in srgb, var(--dsw-alias-state-success-primary, #177a4f) 12%, transparent);
+  --ru-warning: var(--dsw-alias-state-warn-primary, #92600f);
+  --ru-warning-soft: color-mix(in srgb, var(--dsw-alias-state-warn-primary, #92600f) 12%, transparent);
+  --ru-danger: var(--dsw-alias-state-error-primary, #b03529);
+  --ru-danger-soft: color-mix(in srgb, var(--dsw-alias-state-error-primary, #b03529) 10%, transparent);
+  --ru-info: var(--dsw-alias-link, #2f6db0);
+  --ru-info-soft: color-mix(in srgb, var(--dsw-alias-link, #2f6db0) 12%, transparent);
+  --ru-link: var(--dsw-alias-link, #2f6db0);
+  --ru-code-bg: var(--dsw-alias-markdown-code-block, var(--dsw-alias-bg-layer-2, #f8f8f9));
+  --ru-code-ink: var(--dsw-alias-label-primary, #1f2328);
+  --ru-radius: var(--dsw-radius-lg, 16px);
+  --ru-radius-sm: var(--dsw-radius-md, 10px);
+  --ru-shadow: var(--dsw-elevation-soft, 0 1px 2px rgb(0 0 0 / 4%), 0 8px 24px rgb(0 0 0 / 4%));
+  font-family: var(--dsw-font-family, inherit);
+  font-size: var(--dsh-content-font-size, var(--dsw-font-markdown-base, 15px));
+  line-height: var(--dsw-font-markdown-base, 1.62);
+  color-scheme: light;
+}
+
+[data-ds-dark-theme] [data-rich-msg-root] .rich-ui,
+[data-theme="dark"] [data-rich-msg-root] .rich-ui,
+[data-ds-dark-theme][data-rich-msg-root] .rich-ui {
+  --ru-bg: var(--dsw-alias-bg-layer-1, #212121);
+  --ru-elevated: var(--dsw-alias-bg-layer-2, #262627);
+  --ru-surface: var(--dsw-alias-bg-layer-2, #2a2a2b);
+  --ru-surface-2: var(--dsw-alias-bg-layer-3, #353537);
+  --ru-ink: var(--dsw-alias-label-primary, #ececec);
+  --ru-ink-soft: var(--dsw-alias-label-secondary, #d2d2d3);
+  --ru-muted: var(--dsw-alias-label-tertiary, #a3a3a5);
+  --ru-faint: var(--dsw-alias-label-caption, #8b8b8e);
+  --ru-caption-ink: var(--dsw-alias-label-caption, #b8b8ba);
+  --ru-border: var(--dsw-alias-border-l1, #3a3a3c);
+  --ru-border-strong: var(--dsw-alias-border-l2, #4a4a4d);
+  --ru-grid: var(--dsw-alias-border-l1, #343436);
+  --ru-accent: var(--dsw-alias-state-business-primary, #6fc5a6);
+  --ru-accent-ink: var(--dsw-alias-label-primary-foreground, #10231c);
+  --ru-accent-soft: color-mix(in srgb, var(--dsw-alias-state-business-primary, #6fc5a6) 18%, transparent);
+  --ru-success: var(--dsw-alias-state-success-primary, #74c79f);
+  --ru-success-soft: color-mix(in srgb, var(--dsw-alias-state-success-primary, #74c79f) 18%, transparent);
+  --ru-warning: var(--dsw-alias-state-warn-primary, #e0b062);
+  --ru-warning-soft: color-mix(in srgb, var(--dsw-alias-state-warn-primary, #e0b062) 16%, transparent);
+  --ru-danger: var(--dsw-alias-state-error-primary, #f08a80);
+  --ru-danger-soft: color-mix(in srgb, var(--dsw-alias-state-error-primary, #f08a80) 14%, transparent);
+  --ru-info: var(--dsw-alias-link, #85b6ee);
+  --ru-info-soft: color-mix(in srgb, var(--dsw-alias-link, #85b6ee) 14%, transparent);
+  --ru-link: var(--dsw-alias-link, #85b6ee);
+  --ru-code-bg: var(--dsw-alias-markdown-code-block, #1b1b1c);
+  --ru-code-ink: var(--dsw-alias-label-primary, #e6e6e6);
+  --ru-shadow: var(--dsw-elevation-soft, 0 1px 2px rgb(0 0 0 / 30%), 0 12px 32px rgb(0 0 0 / 24%));
+  color-scheme: dark;
+}
+
+/* The rendered surface must never widen the message column. */
+[data-rich-msg-root] {
+  display: block;
+  max-width: 100%;
+  min-width: 0;
+  margin-block: 0.5rem;
+}
+
+[data-rich-msg-root] .rich-ui {
+  max-width: 100%;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* Mobile: keep cards readable at narrow widths. */
+@media (max-width: 480px) {
+  [data-rich-msg-root] .rich-ui {
+    font-size: 14.5px;
+    line-height: 1.58;
+  }
+  [data-rich-msg-root] .rich-ui .ru-card {
+    --ru-radius: 14px;
+  }
+}

@@ -8,7 +8,7 @@ import {
   installEntityTab,
   makeEntityTabBody,
   openEntityInSidebar,
-} from "../../src/host/entity-tab";
+} from "../../src/client/entity-tab";
 import type { Entity } from "../../src/core/schema";
 
 const one: Entity = {

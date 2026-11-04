@@ -1,189 +1,136 @@
-import { readFileSync } from "node:fs";
-import { dirname, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
-import { parseRichSpec, type RichSpec } from "../core/schema";
-
-export const name = "@kyoukisu/dsh-rich-ui";
-export const inject = ["systemPrompt", "tools"];
-
-interface HostContext {
-  systemPrompt: {
-    getSectionOrder(name: string): number;
-    section(section: { name: string; order: number; text: string }): unknown;
-  };
-  tools: {
-    register(definition: ValidateTool): () => void;
-  };
-}
-
 /**
- * Structural shape of one DSH tool definition. The host package deliberately
- * does not import `@deepseek-ai/dsh-tools`: a plugin must keep its own runtime
- * dependencies, and the registry accepts the documented JSON Schema fields.
+ * Host half of dsh-rich-msg.
+ *
+ * Responsibilities, and nothing else:
+ *   1. register the technical tools (schema validation, artifact publication);
+ *   2. own the session-scoped artifact store and its lifecycle;
+ *   3. expose the read-only artifact route when the host has a web server.
+ *
+ * It deliberately does NOT touch `systemPrompt`, register personas or skills,
+ * read any prompt file, or add model behaviour guidance of any kind. Loading
+ * this plugin leaves the model contract exactly as the host and the user's own
+ * configuration define it. See docs/SECURITY.md and docs/TOOL-BRIDGE.md.
+ *
+ * @module dsh-rich-msg
  */
-export interface ValidateTool {
-  name: string;
-  description: string;
-  parameters: Record<string, unknown>;
-  output: {
-    schema: Record<string, unknown>;
-    render: (
-      args: unknown,
-      value: unknown,
-    ) => Array<{ type: "text"; text: string }>;
-  };
-  execute(
-    args: unknown,
-    exec: { signal?: AbortSignal },
-  ): Promise<Record<string, unknown>>;
+import { ArtifactStore, type ArtifactLimits } from './artifacts.ts';
+import { createRichMsgTools, type RichMsgToolDefinition } from './tools.ts';
+import { installArtifactRoute, type WebServerLike } from './route.ts';
+
+/** Stable Cordis plugin name. */
+export const name = 'dsh-rich-msg';
+
+/** The tool registry is the only hard service dependency. */
+export const inject = ['tools'];
+
+/** Plugin configuration; every field is optional. */
+export interface Config {
+  /** Register the two technical tools. Defaults to true. */
+  readonly tools?: boolean;
+  /** Register the read-only artifact route when the host has a web server. Defaults to true. */
+  readonly httpRoute?: boolean;
+  /** Artifact store bounds. */
+  readonly artifacts?: Partial<ArtifactLimits>;
+  /** Reserved name overrides, for compositions that already use the defaults. */
+  readonly toolNames?: { validate?: string; publish?: string };
 }
 
-const MAX_DOCUMENT = 256_000;
-
-function parseDocument(document: string): RichSpec {
-  if (document.length > MAX_DOCUMENT)
-    throw new Error(
-      `Document is longer than ${MAX_DOCUMENT} characters; split the answer or shorten the text.`,
-    );
-  const value: unknown = JSON.parse(document, (key, item: unknown) => {
-    if (key === "__proto__" || key === "constructor" || key === "prototype")
-      throw new Error("Unsafe JSON key");
-    return item;
-  });
-  return parseRichSpec(value);
+/** Knobs the browser half learns from the host at build time (kept for parity/tests). */
+export interface HostDiagnostics {
+  artifactRoute: boolean;
+  tools: string[];
 }
 
-/**
- * Real validation channel for the model. The browser sees only rendered DOM,
- * so it cannot call a tool or edit the conversation. This host-side tool closes
- * that gap the right way: the model validates the exact document before it
- * emits the fence, and a rejection is a tool result rather than a visible user
- * message.
- */
-export function buildValidateTool(): ValidateTool {
+/** Structural subset of the Cordis context this plugin uses. */
+export interface HostContext {
+  tools: { register(definition: RichMsgToolDefinition): () => void };
+  effect?(execute: () => () => void, label?: string): unknown;
+  inject?(deps: string[], callback: (sub: HostContext) => (() => void) | void): unknown;
+  logger?(name: string): { warn(message: string, error?: unknown): void; info(message: string): void };
+  webServer?: WebServerLike;
+}
+
+/** Normalize user configuration without trusting its shape. */
+function normalizeConfig(config: unknown): {
+  tools: boolean;
+  httpRoute: boolean;
+  artifacts: Partial<ArtifactLimits>;
+  toolNames: { validate?: string; publish?: string };
+} {
+  const raw = config !== null && typeof config === 'object' ? (config as Record<string, unknown>) : {};
+  const limits = raw.artifacts !== null && typeof raw.artifacts === 'object' ? (raw.artifacts as Record<string, unknown>) : {};
+  const names = raw.toolNames !== null && typeof raw.toolNames === 'object' ? (raw.toolNames as Record<string, unknown>) : {};
   return {
-    name: "rich_ui_validate",
-    description:
-      "Validate a complete rich-ui v1 JSON document before sending it as a ```rich-ui fence — the default format for product, film, anime, book or place collections, comparisons, dashboards and local calculators. Pass the exact JSON object as a string in document, without the fence markers. Returns {valid:true,title?,nodes,entities} or {valid:false,error}. Fix the reported field and validate again. Call it only immediately before sending a block, not to decide whether rich-ui fits. This is a tool call, not a chat message: it does not ask the user, does not edit the answer, and leaves no repair prompt in the conversation.",
-    parameters: {
-      type: "object",
-      properties: {
-        document: {
-          type: "string",
-          description:
-            "Complete rich-ui JSON document, version 1, as a string. Maximum 256000 characters.",
-        },
-      },
-      required: ["document"],
+    tools: raw.tools !== false,
+    httpRoute: raw.httpRoute !== false,
+    artifacts: {
+      ...(typeof limits.maxPerSession === 'number' ? { maxPerSession: limits.maxPerSession } : {}),
+      ...(typeof limits.maxSessions === 'number' ? { maxSessions: limits.maxSessions } : {}),
+      ...(typeof limits.ttlMs === 'number' ? { ttlMs: limits.ttlMs } : {}),
+      ...(typeof limits.maxDocumentBytes === 'number' ? { maxDocumentBytes: limits.maxDocumentBytes } : {})
     },
-    output: {
-      schema: {
-        type: "object",
-        properties: {
-          valid: { type: "boolean" },
-          error: { type: "string" },
-          title: { type: "string" },
-          nodes: { type: "integer" },
-          entities: { type: "integer" },
-        },
-        required: ["valid"],
-      },
-      render: (_args, value) => [{ type: "text", text: JSON.stringify(value) }],
-    },
-    async execute(args, exec) {
-      exec.signal?.throwIfAborted();
-      if (
-        typeof args !== "object" ||
-        args === null ||
-        typeof (args as { document?: unknown }).document !== "string"
-      )
-        throw new Error("document must be a string");
-      const document = (args as { document: string }).document;
-      try {
-        const spec = parseDocument(document);
-        return {
-          valid: true,
-          ...(spec.title === undefined ? {} : { title: spec.title }),
-          nodes: countNodes(spec),
-          entities: spec.entities?.length ?? 0,
-        };
-      } catch (error) {
-        return {
-          valid: false,
-          error:
-            error instanceof Error
-              ? error.message.slice(0, 1000)
-              : String(error).slice(0, 1000),
-        };
-      }
-    },
-  };
-}
-
-function countNodes(spec: RichSpec): number {
-  let count = 0;
-  const visit = (nodes: RichSpec["nodes"]) => {
-    for (const node of nodes) {
-      count += 1;
-      if (node.type === "conditional") {
-        visit(node.children);
-        if (node.elseChildren) visit(node.elseChildren);
-      } else if ("children" in node) {
-        visit(node.children as RichSpec["nodes"]);
-      }
-      if (node.type === "tabs")
-        for (const tab of node.tabs) visit(tab.children);
+    toolNames: {
+      ...(typeof names.validate === 'string' && names.validate !== '' ? { validate: names.validate } : {}),
+      ...(typeof names.publish === 'string' && names.publish !== '' ? { publish: names.publish } : {})
     }
   };
-  visit(spec.nodes);
-  return count;
 }
-
-const SKILL_DIR = resolve(
-  dirname(fileURLToPath(import.meta.url)),
-  // Source src/host and emitted lib/host share the same two-level package root.
-  "../../prompt-rich-ui",
-);
-const PROMPT_PATH = resolve(SKILL_DIR, "prompt.md");
 
 /**
- * The contract is part of the system prompt, not a lazily loaded skill: rich-ui
- * is a frequent output shape, and a skill lookup per answer costs more than the
- * text. Reference files stay on disk and are opened only when a block was
- * rejected or an unfamiliar node is needed; their absolute paths are part of
- * the prompt so the model never has to guess where they are.
+ * Apply the host plugin.
+ * @param ctx - Cordis plugin context.
+ * @param config - optional plugin configuration.
+ * @returns a disposer for hosts that treat the return value as cleanup.
  */
-export function buildSection(hasTool = true): string {
-  const body = readFileSync(PROMPT_PATH, "utf8").trim();
-  return [
-    "Use a fenced rich-ui block for collections and comparisons by default: product, film, anime, book or place lists, dashboards, quotes and calculators. Keep single facts and short explanations as prose. This language is NOT dsh-ui.",
-    body,
-    `Reference files, opened only if a block was rejected or you need an unfamiliar node: ${SKILL_DIR}/references/schema.md and ${SKILL_DIR}/references/examples.md. Do not read them pre-emptively.`,
-    hasTool
-      ? "The host registers the `rich_ui_validate` tool. Call it once with the exact document before emitting each rich-ui block, fix any reported error, and send the validated document. The tool returns a schema error as a tool result; no user-visible repair message exists."
-      : "No `rich_ui_validate` tool is registered on this host. Do not call it; check the document against the reference files and send only a complete valid block.",
-  ].join("\n\n");
-}
+export function apply(ctx: HostContext, config?: Config): () => void {
+  const settings = normalizeConfig(config);
+  const store = new ArtifactStore(settings.artifacts);
+  const disposers: Array<() => void> = [];
+  const diagnostics: HostDiagnostics = { artifactRoute: false, tools: [] };
+  let disposed = false;
 
-export function apply(ctx: HostContext): (() => void) | undefined {
-  // Register first: the prompt must not promise a tool that this host refused.
-  let disposeTool: (() => void) | undefined;
-  let hasTool = false;
-  try {
-    disposeTool = ctx.tools.register(buildValidateTool());
-    hasTool = true;
-  } catch (error) {
-    console.warn("[rich-ui] validation tool unavailable", error);
+  const disposeAll = (): void => {
+    if (disposed) return;
+    disposed = true;
+    for (const dispose of disposers.splice(0).reverse()) {
+      try {
+        dispose();
+      } catch {
+        /* A failing disposer must not block the remaining cleanup. */
+      }
+    }
+    store.dispose();
+  };
+
+  if (settings.tools) {
+    for (const definition of createRichMsgTools({ store, names: settings.toolNames })) {
+      const dispose = ctx.tools.register(definition);
+      disposers.push(typeof dispose === 'function' ? dispose : () => {});
+      diagnostics.tools.push(definition.name);
+    }
   }
-  try {
-    ctx.systemPrompt.section({
-      name: "rich-ui:fence",
-      order: ctx.systemPrompt.getSectionOrder("STRUCTURED_OUTPUT"),
-      text: buildSection(hasTool),
-    });
-  } catch (error) {
-    disposeTool?.();
-    throw error;
+
+  if (settings.httpRoute) {
+    const register = (sub: HostContext): (() => void) | void => {
+      const webServer = sub.webServer;
+      if (webServer === undefined || typeof webServer.register !== 'function') return;
+      const dispose = installArtifactRoute(webServer, store);
+      diagnostics.artifactRoute = true;
+      return dispose;
+    };
+    if (typeof ctx.inject === 'function') {
+      // Optional seat: loads when (and only when) a web server service exists.
+      ctx.inject(['webServer'], register);
+    } else if (ctx.webServer !== undefined) {
+      const dispose = register(ctx);
+      if (typeof dispose === 'function') disposers.push(dispose);
+    }
+    if (typeof ctx.effect === 'function') {
+      ctx.effect(() => disposeAll, 'dsh-rich-msg: host resources');
+    }
+  } else if (typeof ctx.effect === 'function') {
+    ctx.effect(() => disposeAll, 'dsh-rich-msg: host resources');
   }
-  return disposeTool;
+
+  return disposeAll;
 }

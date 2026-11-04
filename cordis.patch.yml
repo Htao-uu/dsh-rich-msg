@@ -1,4 +1,8 @@
-# Installed only into the explicitly selected test profile.
+# dsh-rich-msg bundle layer.
+#
+# Inserts only the host plugin row. The plugin registers technical tools
+# (validation and artifact publication) and an optional artifact read route.
+# It registers NO prompt section, NO persona, NO skill and NO agent preset.
 - insert:
-    - id: rich-ui
-      name: '@kyoukisu/dsh-rich-ui'
+    - id: rich-msg
+      name: dsh-rich-msg

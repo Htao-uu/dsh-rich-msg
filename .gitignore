@@ -1,9 +1,8 @@
 node_modules/
-dist/
 lib/
+dist/
+.package/
+dev/
 .cache/
-playwright-report/
-test-results/
-.env*
-!.env.example
-*.tgz
+*.log
+.DS_Store

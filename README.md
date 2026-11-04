@@ -1,238 +1,255 @@
-<div align="center">
+# dsh-rich-msg
 
-# DSH Rich UI
+一个独立、无模型行为倾向的 **DSH 富内容消息渲染引擎**（Rich Message Renderer）。
 
-**ChatGPT-style rich answers inside DeepSeek Harness.**
+它把结构化 JSON 协议渲染成美观、可交互、跟随宿主主题的消息内容，并提供两条互不耦合的输出通道：
 
-Entity collections with detail panels, KPI cards, multi-series charts, sortable tables, flow and layered architecture diagrams, calculators that recompute as you drag — rendered natively inside [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness).
+| 通道 | 数据来源 | 最终展示位置 |
+|---|---|---|
+| **A. Markdown Fence** | 最终 Assistant 回答正文中的 ```rich-msg 代码围栏 | 原位替换该代码块 |
+| **B. Tool Bridge** | 工具调用 `rich_msg_publish` 暂存的结构化内容 + 最终回答中的 `ref` 引用 | 最终回答中引用所在的位置 |
 
-[![stars](https://shieldcn.dev/github/kyoukisu/dsh-rich-ui/stars.svg?variant=branded&size=xs)](https://github.com/kyoukisu/dsh-rich-ui/stargazers)
-[![license](https://shieldcn.dev/github/kyoukisu/dsh-rich-ui/license.svg?variant=branded&size=xs)](LICENSE)
-[![last commit](https://shieldcn.dev/github/kyoukisu/dsh-rich-ui/last-commit.svg?variant=branded&size=xs)](https://github.com/kyoukisu/dsh-rich-ui/commits/main)
-![DSH](https://shieldcn.dev/badge/DSH-0.2.x-1f6feb.svg?variant=branded&size=xs)
-[![npm](https://img.shields.io/npm/v/@kyoukisu/dsh-rich-ui?label=npm&color=cb3837)](https://www.npmjs.com/package/@kyoukisu/dsh-rich-ui)
+两条通道共用同一套 Schema、校验器、React Renderer 与主题适配层。
 
-[Live demo](https://rich-ui.beako.best/) · [Install](#install) · [Quick start](#quick-start) · [Contract](prompt-rich-ui/prompt.md) · [Design notes](docs/PARITY.md) · [Safety](#safety)
+本项目是**纯技术渲染层**：它不注入 system prompt / developer prompt / persona / skill，不规定模型何时使用富内容，也不改变模型回答风格。是否使用、何时使用、如何组织内容，完全由使用者自己的 Persona、Prompt 或上层应用决定。
 
-</div>
+---
 
-<p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/images/listing-desktop-dark.png">
-    <img alt="A product listing rendered by the plugin: summary strip, real photos, prices and a green highlight badge" src="docs/images/listing-desktop.png" width="860">
-  </picture>
-</p>
+## 设计目标
 
-## What this is, and why
+1. **协议先行**：先定义并校验数据结构，再渲染；非法数据永不执行、永不修补。
+2. **双通道、单渲染器**：Fence 与 Tool 两种入口最终都落到同一个 `RichResponse`。
+3. **只渲染最终回答**：推理过程、工具调用阶段、中间步骤中的内容不会被当成最终 UI 展示。
+4. **宿主优先的视觉**：组件保留自己的布局语言，颜色、字体、背景、边框、圆角、阴影全部取自 DSH 主题变量；明暗主题与移动端开箱即用。
+5. **安全默认**：声明式 JSON、无 HTML/JS 执行、无 eval、URL 白名单、Action 白名单、大小/深度/数量限制、Session 隔离。
+6. **可卸载、可重挂载**：所有 React root、样式、监听器、路由、缓存都有明确的生命周期。
 
-A model can describe a comparison, but a wall of Markdown makes the reader do the layout work. This plugin gives the model a small declarative language for the cases where structure carries the answer: side-by-side options, an object you want to inspect, a number the reader will change.
+## 它不负责什么
 
-The renderer is a real React tree behind a strict schema. There is no generated HTML, no `eval`, no shell access, and no page-level JavaScript from the model. Local controls recompute in the browser; the model is only called again when the reader explicitly asks.
+- 不决定模型应该如何思考、回答、教学或组织内容。
+- 不注册任何 prompt 段落、Persona、Skill 或 Agent 预设。
+- 不通过工具描述夹带 UI 使用策略。
+- 不替使用者选择模型、语气或教学策略。
 
-<p align="center">
-  <img alt="Film collection reflowed beside an open detail panel with two posters, facts, cast and sources" src="docs/images/films-desktop.png" width="860">
-  <br>
-  <em>In the lab the answer reflows beside the open panel. In Harness the same entity opens as a native right-column tab, so the conversation narrows instead of being covered — see <a href="docs/DSH-INTEGRATION.md">the integration notes</a>.</em>
-</p>
+---
 
-<p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/images/apps-desktop-dark.png">
-    <img alt="Software shortlist with wide screenshots on the left, full descriptions and source links on the right, followed by a captioned screenshot gallery" src="docs/images/apps-desktop.png" width="820">
-  </picture>
-  <br>
-  <em><code>entity-list layout:"feature"</code> gives a software shortlist a wide preview, the whole description and its sources. Below it, a captioned gallery shows one screenshot at a time.</em>
-</p>
+## 架构
 
-<p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/images/dashboard-desktop-dark.png">
-    <img alt="Dashboard answer with three KPI cards, a two-series line chart, a sortable, filterable table with status pills and a vertical flow" src="docs/images/dashboard-desktop.png" width="820">
-  </picture>
-  <br>
-  <em>Metrics, a two-series chart with units and hover, a filterable table with status pills and an ordered flow — one document.</em>
-</p>
-
-<p align="center">
-  <img alt="Layered architecture: HTTP handlers containing a connection pool with three connections, an arrow to PostgreSQL, and a Go code block with syntax colour" src="docs/images/layers-desktop.png" width="820">
-  <br>
-  <em>Boxes inside boxes: the pool holds connections, the arrow shows what it talks to. The code block keeps language label, syntax colour and copy.</em>
-</p>
-
-<p align="center">
-  <img alt="A calculator with sliders that recompute the result locally" src="docs/images/calculator-dark.png" width="700">
-  <br>
-  <em>Sliders recompute the number in the browser; the model is not called again.</em>
-</p>
-
-<p align="center">
-  <img alt="The same dashboard on a 390 pixel phone: two-column KPI cards, all six chart month labels and a four-column table that fits" src="docs/images/dashboard-mobile.png" width="300">
-  <br>
-  <em>390 px: KPI cards in two columns, every chart label, and a table that still fits.</em>
-</p>
-
-## Live demo
-
-**[rich-ui.beako.best](https://rich-ui.beako.best/)** — the real renderer in laboratory conditions, no install. Scenarios: dashboard, films, listing, calculator, configurator, technical breakdown and the rejected-block diagnostic; add `&theme=dark` for the dark theme. Demo data is illustrative.
-
-## Install
-
-Requires DeepSeek Harness `0.2.x` and Node `22.19+`. No NixOS change, no patched Harness.
-
-```sh
-dsh plugin --profile web add @kyoukisu/dsh-rich-ui
-systemctl --user restart deepseek-harness   # or restart however your Harness runs
+```
+dsh-rich-msg
+├── Host Integration（Node / Cordis 插件）
+│   ├── lib/index.js         插件入口：注册工具、装配 Artifact Store、可选 HTTP 读取路由
+│   ├── Artifact Store       会话作用域、带 TTL / 容量上限 / 淘汰策略的内存存储
+│   └── Final Message Bridge 由「工具暂存 + 最终回答引用」构成的两段式桥接
+│
+├── Protocol（框架无关）
+│   ├── core/schema.ts       RichSpec v1 定义与严格校验
+│   ├── core/evaluator.ts    安全表达式求值（无 eval）
+│   ├── core/partial.ts      流式前缀解析（只呈现已闭合且合法的部分）
+│   └── shared/protocol.ts   Fence 语言、ref 协议、Action 信封、DOM 标记、上限
+│
+├── Renderer（React）
+│   ├── ui/RichResponse.tsx  节点调度、交互状态、持久化
+│   ├── ui/blocks/*          Chart / Table / Metrics / Media / Layers / Code / Field
+│   ├── ui/EntityList.tsx    实体列表与详情
+│   └── ui/primitives/*      Popover / Tooltip / Lightbox / Gallery 等基础件
+│
+├── Client Integration（浏览器）
+│   ├── client/dom-renderer.tsx  Fence 发现、最终消息判定、挂载/回滚
+│   ├── client/chat-view.ts     读取 Chat Snapshot：最终性、推理排除、Artifact 索引
+│   ├── client/artifact-resolver.ts  ref 解析（会话日志优先，HTTP 路由兜底）
+│   ├── client/actions.ts        交互事件 → 用户消息
+│   └── client/entity-tab.tsx    可选：右侧栏实体详情页
+│
+├── Theme
+│   └── client/host-theme.css    DSH 主题变量 → 组件 token（明/暗/移动端）
+│
+└── Tests / scripts
 ```
 
-From a checkout — this is the loop the author uses:
+详细设计见 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)。
 
-```sh
-git clone https://github.com/kyoukisu/dsh-rich-ui && cd dsh-rich-ui
-npm ci && npm run build:plugin
-dsh plugin --profile web add link:$PWD
-```
+---
 
-Unreleased commits: `dsh plugin --profile web add github:kyoukisu/dsh-rich-ui`.
+## 两条输出通道
 
-The plugin registers itself as a bundle; the fence language is `rich-ui`.
+### A. Markdown Fence
 
-## Quick start
+最终 Assistant 回答中：
 
-Ask for something that benefits from structure, in a new session:
-
-```text
-Compare three electric kettles by price, volume and features. Make it clickable.
-```
-
-The reply arrives as an interface: a summary strip, rows with photos, and a green highlight on the cheapest option. Opening a row shows facts, sources and related items without leaving the conversation.
-
-Things worth trying: *"build a budget calculator with three sliders"*, *"show this quarter as a chart and a table"*, *"make a configurator with tabs and conditional warnings"*.
-
-## What it can render
-
-| Group | Nodes |
-|---|---|
-| Layout | `stack`, `row`, `grid`, `card`, `divider`, `meta` |
-| Text | `text` with inline `code`, **bold**, links and `[[entityId]]` chips; `callout` with optional title; `code` with syntax colour, language label, line numbers and copy |
-| Objects | `entity-ref`, `entity-list` in compact or `layout:"feature"` rows, with poster, square or landscape previews; entity details dock in the native right column or fall back to an in-page drawer, with a two-up photo gallery or one captioned screenshot at a time, plus cast |
-| Data | `stat` (KPI card), `progress`, `status`, `table` (sortable, filterable, status and progress columns, scroll hint when it overflows), `chart` (bar / line / area / donut / scatter, 1–6 series, units, tooltips), `computed` |
-| Flow | `diagram` with ordered steps, connector labels and branch depth; `layers` for boxes-inside-boxes architecture with member chips |
-| Media | `image` with caption, `image-group` with optional per-frame captions and an inline `presentation:"gallery"`, `video` and `audio` with native controls, gallery lightbox, popover, tooltip |
-| Controls | `input` (text / number / date), `select`, `slider`, `switch`, `checkbox`, `radio`, `segmented`, `tabs` |
-| Logic | expressions (`add`, `mul`, `round`, comparisons…), `conditional`, local actions, `send-message` |
-
-Roughly 150 Lucide icons resolve by name, with semantic tones (`success`, `warning`, `danger`, `muted`) so colour means something. Light and dark themes follow the host palette and font.
-
-## The contract in ten lines
-
-````text
-```rich-ui
-{"version":1,"title":"Budget","initialState":{"spend":1200},
- "nodes":[
-  {"type":"slider","stateKey":"spend","label":"Monthly spend, €","min":100,"max":5000,"step":100},
-  {"type":"computed","label":"Per year, €","expr":{"op":"mul","args":[{"state":"spend"},12]}},
-  {"type":"callout","tone":"info","content":"Recomputed locally — no model call."}
- ]}
+````markdown
+```rich-msg
+{"version":1,"nodes":[{"type":"text","content":"Hello"},{"type":"stat","label":"Score","value":42}]}
 ```
 ````
 
-<details>
-<summary>Entities, tables, charts and actions — one complete document</summary>
+渲染器会：
+
+1. 只处理 **最终回答** 的 `assistant-step` 行，并用 Chat Snapshot 校验：该步骤是整轮对话的收尾回答，且其后没有工具调用；
+2. 通过 Snapshot 中该步骤的内容块区分 **正文** 与 **推理**：推理块中的围栏永不渲染；
+3. 校验 JSON；非法内容保持原生代码块（流式中）或显示诊断卡片（已稳定）；
+4. 在原位置挂载独立的 React root 并隐藏源码块，卸载时完整还原。
+
+`rich-ui` 作为上游兼容别名同样被接受。普通代码块、其他语言、工具行内容完全不受影响。
+
+### B. Tool Bridge
+
+工具调用负责**准备**内容，最终回答负责**决定是否呈现**：
+
+```
+模型调用 rich_msg_publish({document})
+   → Host 校验、存入会话作用域 Artifact Store
+   → 返回 {ok:true, id:"rm_…", kind, summary}
+模型在最终回答中写：
+```rich-msg
+{"version":1,"ref":"rm_…"}
+```
+   → 浏览器从会话日志中的工具调用还原文档（主路径）
+   → 或读取 Host 的只读路由（兜底）
+   → 在最终回答的引用位置渲染
+```
+
+如果最终回答没有引用该 id，内容不会被显示；工具阶段本身不渲染任何富内容。
+
+详细数据流与验证方法见 [docs/TOOL-BRIDGE.md](docs/TOOL-BRIDGE.md)。
+
+---
+
+## 支持的能力
+
+组件与字段的完整清单见 [docs/COMPONENTS.md](docs/COMPONENTS.md)，数据协议见 [docs/PROTOCOL.md](docs/PROTOCOL.md)。
+
+- **布局**：`stack` / `row` / `grid` / `card` / `carousel` / `divider` / `meta`
+- **文本**：`text`（行内 code/bold/链接/实体 chip）、`callout`、`code`
+- **对象**：`entity-list` / `entity-ref` / 实体详情面板 / 图库 / 图片灯箱 / `image` / `image-group` / `gallery`
+- **数据**：`stat` / `progress` / `status` / `table`（排序、筛选、状态色、进度列）/ `chart`（bar/line/area/donut/scatter）/ `computed`
+- **流程**：`diagram` / `layers`
+- **媒体**：`image` / `video` / `audio` / `popover` / `tooltip`
+- **控件**：`input` / `select` / `slider` / `switch` / `checkbox` / `radio` / `segmented` / `tabs`
+- **逻辑**：`expression` / `conditional` / 本地 Action（set/toggle/reset/open-entity/close-entity/copy/open-url/send-message）
+
+## 工具接口
+
+| 工具 | 输入 | 输出 | 说明 |
+|---|---|---|---|
+| `rich_msg_validate` | `{document: string}` | `{valid, error?, title?, nodes?, entities?}` | 只做 Schema 校验，无副作用 |
+| `rich_msg_publish` | `{document: string}` | `{ok, id?, kind?, summary?, error?}` | 校验并存入当前会话的 Artifact Store，返回稳定引用 id |
+
+工具描述只说明输入、输出与副作用，不包含任何"何时应该使用"的行为指导。
+
+## 安装
+
+### 方式一：本地 link（开发）
+
+```powershell
+# 1) 构建
+node scripts/build.mjs
+
+# 2) 在 %USERPROFILE%.dshprofiles<name>package.json 中声明（示例）
+#    {
+#      "name": "dsh-profile-richmsg",
+#      "private": true,
+#      "dependencies": { "dsh-rich-msg": "link:E:/path/to/dsh-rich-msg" },
+#      "dsh": { "profile": { "bundles": ["@deepseek-ai/dsh-base", "@deepseek-ai/dsh-web-app", "dsh-rich-msg"] } }
+#    }
+#    并在该 profile 的 node_modules 下建立指向本目录的 junction/symlink。
+
+# 3) 启动该 profile
+node <dsh>/lib/bin.js --profile <name> --host 127.0.0.1 --port 58470 --no-open
+```
+
+### 方式二：作为依赖安装
+
+把本包发布/复制到可解析的位置后，在 profile 的 `package.json` 中：
 
 ```json
-{"version":1,"title":"Films for tonight",
- "entities":[{"id":"a","kind":"Film","title":"Arrival","subtitle":"2016 · science fiction",
-   "image":"https://example.org/poster.jpg",
-   "facts":[{"label":"Director","value":"Denis Villeneuve"}],
-   "sources":[{"title":"TMDB","url":"https://www.themoviedb.org/movie/329865-arrival"}],
-   "badge":{"label":"Editors' pick","tone":"success"}}],
- "nodes":[
-  {"type":"meta","items":[{"icon":"film","text":"3 films"},{"icon":"clock","text":"2 hours"}]},
-  {"type":"entity-list","entityIds":["a"]},
-  {"type":"table","columns":[{"key":"k","label":"What"},{"key":"v","label":"How many"}],
-   "rows":[{"k":"Screenings","v":3}]},
-  {"type":"chart","kind":"bar","data":[{"label":"Mon","value":2},{"label":"Tue","value":5}]}]}
+{
+  "dependencies": { "dsh-rich-msg": "link:E:/path/to/dsh-rich-msg" },
+  "dsh": { "profile": { "bundles": ["@deepseek-ai/dsh-base", "@deepseek-ai/dsh-web-app", "dsh-rich-msg"] } }
+}
 ```
 
-</details>
-
-The authoritative text is [prompt-rich-ui/prompt.md](prompt-rich-ui/prompt.md); exact fields, enums and budgets live in [references/schema.md](prompt-rich-ui/references/schema.md), and working documents in [references/examples.md](prompt-rich-ui/references/examples.md).
-
-## How it works
-
-```mermaid
-flowchart LR
-  A["Model writes a rich-ui fence"] --> B["Adapter finds the code block"]
-  B --> C{Strict JSON schema}
-  C -- invalid --> D["Stays a normal code block"]
-  C -- valid --> E["React renderer mounts"]
-  E --> F["Local state, no model call"]
-  F -- explicit button --> G["rich-ui action message"]
+```powershell
+dsh plugin --profile <profile> add link:E:/path/to/dsh-rich-msg
+# 并把 "dsh-rich-msg" 加入 dsh.profile.bundles
 ```
 
-- **Node half** registers one always-on system-prompt section with the whole contract and the absolute path of the reference files, plus the `rich_ui_validate` tool. The model can validate the exact JSON before emitting it; a schema error comes back as a tool result, not a visible user message.
-- **Browser half** validates the fence and mounts into a plugin-owned root. While the model is still writing, closed nodes render in an inert preview and become interactive when the block settles.
-- A malformed document is never patched in place and never triggers an automatic message: it shows a diagnostic card with the exact error and the rejected JSON, plus a copy button. A browser plugin has no tool channel, so the card deliberately has no "ask the model" button. Unfinished streams stay code until the model closes them.
+> 新增/替换包后需要重启宿主进程；客户端资源会按 boot revision 重新生成。
 
-## Safety
+## 主题
 
-| Risk | Mitigation |
-|---|---|
-| Arbitrary code execution | Declarative JSON only; no HTML, CSS, JS, `eval` or property paths |
-| Prompt-injected actions | Local actions cannot call tools; `send-message` needs an explicit click and is delivered as ordinary user text |
-| Secrets in the UI | Password/secret state keys are rejected; no secret input components exist |
-| Hostile URLs | `http(s)` only, credentials in URLs rejected |
-| Resource exhaustion | Bounded depth, node count, string size and expression budget |
-| Stored data | Persistence is opt-in, per session, and never stores text or date inputs |
+- 全部颜色/字体/圆角/阴影来自 DSH 的 `--dsw-*` 令牌；
+- 同时支持浅色与深色主题（跟随 `data-ds-dark-theme` 与上游 `data-theme="dark"`）；
+- 组件不覆盖宿主消息气泡、侧边栏或其它插件的布局；
+- 移动端 390px 宽度下保持可读。
 
-## Parity with the reference
+详见 [docs/THEME.md](docs/THEME.md)。
 
-Measured, not claimed: **19 of 27** reference scenarios reproduced, **2 partial**, **6 missing** — with an itemised deviation list in [docs/PARITY.md](docs/PARITY.md). Missing today: Mermaid/ER graphs, math, maps, artifacts, persistent panels and mini-apps.
+## 安全
 
-Known limitation: the fence label is not preserved by Harness, so an unlabelled block is claimed only when its payload looks like a spec document and passes the strict parser. A `json`-labelled block is never claimed.
+- 只接受声明式 JSON；
+- 拒绝 `__proto__` / `constructor` / `prototype` 键，防原型污染；
+- 文档大小、嵌套深度、数组长度、组件数量、字符串长度全部有上限；
+- URL 仅允许 http(s)，禁止内嵌凭据与危险协议；
+- Action 事件白名单校验；交互只由用户触发；
+- 富内容不能直接调用任意 DSH 工具；
+- Artifact 按 Session 隔离，跨 Session 查询与不存在等价；
+- 日志不写入文档内容或表单值。
 
-## Troubleshooting
+详见 [docs/SECURITY.md](docs/SECURITY.md)。
 
-**The block stayed as code.** The JSON did not pass the schema — usually an unknown field (`title` inside a node that has none, or `items` from another plugin's syntax). A claimed fence shows the exact error and the rejected source, and copies them on request. Nothing is executed, rewritten or sent automatically. The model should call `rich_ui_validate` before sending; if it did not, ask it to fix the document and validate it.
+## 兼容性与已验证范围
 
-<p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/images/diagnostic-dark.png">
-    <img alt="Diagnostic card: rich block not parsed, missing value, and copy error" src="docs/images/diagnostic-light.png" width="820">
-  </picture>
-  <br>
-  <em>A rejected block explains itself and copies the exact error and source. Nothing is sent automatically.</em>
-</p>
+- 目标宿主：`@deepseek-ai/dsh@0.2.2-alpha.2`（本机 `E:\tools\dsh-cli`）。
+- Fence 发现依赖宿主 DOM 标记（`data-chat-flow-kind`、`data-code-block-content` 等）。宿主升级后需重新验证；标记变化时渲染器**失败关闭**（保留原生代码块）。
+- 最终消息判定依赖 Chat Snapshot（`uiConversation`）。该服务不可用时退化为保守的 DOM 规则（仅已稳定的 assistant 行，且不预览流式内容），并在文档中明确记录这一降级。
+- **已验证**：13 个测试文件 / 210 项单元与集成测试通过；`tsc --noEmit` 0 错误；隔离 profile 下真实 DSH 宿主加载与 DOM 冒烟验证通过（插件加载、模块分发、Fence 渲染、普通代码/工具行/流式行不接管、卸载还原、零控制台错误、浅色/深色/390px 截图）。
+- **未验证（待人工）**：真实模型对话下的 Fence 通道与 Tool Bridge 引用渲染。自动化 CDP 发送消息未打通，已按交付要求停止；请按 [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) 第 5.3 节清单在真实 DSH 中人工验证。
 
+## 上游项目与许可证
 
-**Images show a placeholder.** The URL is wrong, blocked by the remote host, or not `http(s)`. Ozon/WB CDNs reject hotlinks; use a permitted source or your own media host.
+- 本项目基于 **kyoukisu/dsh-rich-ui**（MIT）的源码进行独立开发与重构：保留了其成熟的 RichSpec Schema、表达式求值器、React 组件与视觉实现，重写了宿主集成、消息判定、工具桥接、主题桥接与文档，并移除了运行时 Prompt 注入。
+- 上游版权声明保留在 [LICENSE](LICENSE)（MIT, Copyright (c) 2026 kyoukisu）。
+- 图标来自 [lucide-react](https://lucide.dev)（ISC），详见 [docs/THIRD-PARTY.md](docs/THIRD-PARTY.md)。
+- 本项目与上游作者无隶属、合作或背书关系；名称 `dsh-rich-msg` 用于区分衍生项目。
 
-**Old `dsh-ui` messages stopped rendering.** That is a different plugin's syntax. This one claims `rich-ui` only.
+## 变更报告
 
-## Development
+| 模块 | 上游原有能力 | 本次修改 | 修改原因 |
+|---|---|---|---|
+| Prompt | 通过 `inject: ["systemPrompt"]` 注册 `rich-ui:fence` 段落，构建行为指令并注入每次请求 | **完全移除**运行时注入；删除 `prompt-rich-ui/` 运行时文件；技术内容改为离线文档 | 保持模型行为中立 |
+| Validator | `rich_ui_validate` 工具，描述含"默认使用/优先"等行为指导 | 保留校验能力，改名为 `rich_msg_validate`，描述仅含参数、返回与副作用 | 工具 API 保持纯技术性 |
+| Tool | 仅校验，无状态 | 新增 `rich_msg_publish` + 会话作用域 Artifact Store + 只读读取路由 | 支持 Tool 输出通道 |
+| Fence | DOM MutationObserver 扫描 `rich-ui` 围栏，仅以 assistant-step 祖先判定 | 保留扫描技术；新增 Chat Snapshot 最终性判定、推理排除、流式回撤、引用解析、稳定重挂载 | 只渲染最终回答，不误渲染推理/工具阶段 |
+| Renderer | RichSpec React 组件体系 | 复用全部组件；命名空间改为 `dsh-rich-msg`；保留既有可访问性修复 | 降低改造成本 |
+| Theme | 自带配色 + 部分 DSH token 桥接 | 新增完整桥接层（明/暗/移动端），统一映射 `--dsw-*` | Hybrid 视觉要求 |
+| Actions | `[rich-ui-action]` 用户消息 | 改为 `[rich-msg-action]`，保留白名单、大小上限、会话捕获 | 品牌统一与安全 |
+| Build | Vite + tsc + 独立 demo | esbuild 双产物（Host ESM / Client ModuleLoader bundle），无需 Vite 运行时 | 简化构建、与宿主加载协议对齐 |
+| Tests | vitest 单测 + Playwright 截图 | 保留并扩充为 13 文件 / 210 项单测与集成测试；新增真实宿主 DOM 冒烟脚本；真实模型 E2E 改为人工验证 | 可复现、不虚构验证 |
+| Docs | 上游内部文档 + 运行时 prompt 文件 | 重写为 7 份技术文档，且明确不得成为运行时 prompt | 交付要求 |
 
-```sh
-npm ci
-npm run dev            # lab at http://127.0.0.1:4173, HMR, no Harness needed
-npm run build          # typecheck + lab build
-npm run build:plugin   # the two real bundle artifacts
-npm test               # 217 unit, schema and DOM tests
-npm run test:browser   # 58 Playwright desktop + mobile checks (goldens never auto-update)
-# Interaction timings: docs/PERFORMANCE.md
+完整说明见 [docs/CHANGES.md](docs/CHANGES.md)。
+
+## 开发
+
+```powershell
+node scripts/build.mjs               # 构建 lib/index.js 与 lib/client.js
+npx tsc --noEmit                     # 类型检查
+npx vitest run                       # 单元 + 集成测试
+node scripts/package.mjs             # 打包 dist/*.zip + sha256
 ```
 
-Browser tests run in a pinned container so no system libraries are required:
+详见 [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)。
 
-```sh
-docker run --rm --network host --ipc host --user "$(id -u):$(id -g)" \
-  -e HOME=/tmp -v "$PWD:/work" -w /work \
-  mcr.microsoft.com/playwright:v1.64.1-noble npx playwright test
+## 目录
+
 ```
-
-Scenarios in the lab: `?demo=dashboard`, `films`, `listing`, `apps`, `calculator`, `configurator`, `technical`, `primitives`, plus `&theme=dark`.
-
-Screenshots in this README are captures of that lab, not mockups. Golden images under `tests/` are regression baselines and say nothing about fidelity to another product.
-
-## License
-
-MIT — see [LICENSE](LICENSE). Demo photography comes from Wikimedia Commons under free licences; prices and metadata are illustrative. DeepSeek Harness is a separate project by DeepSeek; this plugin is unaffiliated. ChatGPT is a trademark of OpenAI: the description points at the style of rich answers, not at any affiliation, endorsement or shared code.
+src/core        协议与求值
+src/host        Node 插件：工具、Artifact Store、读取路由
+src/client      浏览器插件：Fence 渲染、消息判定、引用解析、交互回传
+src/ui          React Renderer 与样式
+src/shared      双端共享协议常量
+tests           单元与集成测试
+scripts         构建与真实宿主验证脚本
+docs            技术文档
+```

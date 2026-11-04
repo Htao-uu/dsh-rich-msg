@@ -12,7 +12,7 @@ import { getInitialState } from "../core/evaluator";
  * unbound state, entity selection and action payloads are never written. Any input sharing
  * a state key excludes that key. Storage denial/quota/corruption gracefully disables restore.
  */
-const PREFIX = "dsh-rich-ui:state:v1:";
+const PREFIX = "dsh-rich-msg:state:v1:";
 const MAX_RECORD = 32768;
 function canonical(value: unknown): string {
   if (value === null || typeof value !== "object") return JSON.stringify(value);
