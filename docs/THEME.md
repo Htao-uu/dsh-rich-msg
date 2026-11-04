@@ -8,20 +8,22 @@
 
 `src/client/host-theme.css` 在组件样式之后加载，把 DSH 令牌映射到渲染器自己的 `--ru-*` 变量：
 
-| 渲染器变量 | DSH 令牌 | 用途 |
+| 渲染器变量 | 来源 | 用途 |
 |---|---|---|
-| `--ru-bg` | `--dsw-alias-bg-layer-1` | 页面/卡片底色 |
-| `--ru-surface` / `--ru-surface-2` | `--dsw-alias-bg-layer-2` / `-3` | 嵌层表面 |
-| `--ru-ink` / `--ru-ink-soft` / `--ru-muted` / `--ru-faint` | `--dsw-alias-label-primary` / `-secondary` / `-tertiary` / `-caption` | 文本层级 |
-| `--ru-border` / `--ru-border-strong` | `--dsw-alias-border-l1` / `-l2` | 描边 |
-| `--ru-accent` | `--dsw-alias-state-business-primary` | 强调色 |
-| `--ru-success/warning/danger` | `--dsw-alias-state-success/warn/error-primary` | 语义状态 |
-| `--ru-link` | `--dsw-alias-link` | 链接 |
-| `--ru-code-bg` | `--dsw-alias-markdown-code-block` | 代码底 |
+| `--ru-bg` | ink 4%（深色 8%）混入 layer-1 | 组件表面 |
+| `--ru-elevated` | ink 2%（深色 5%）混入 layer-1 | 卡片/控件的高亮表面 |
+| `--ru-surface` | ink 7%（深色 11%） | 富内容块外框面板 |
+| `--ru-surface-2` | ink 12%（深色 16%） | 选中态、内嵌表面 |
+| `--ru-ink` / `--ru-ink-soft` | label-primary / 86% 混合 | 文本层级 |
+| `--ru-muted` / `--ru-faint` | ink 62% / 52%（深色 68% / 56%） | 次要文本 |
+| `--ru-border` / `--ru-border-strong` | ink 17% / 27%（深色 21% / 32%） | 描边 |
+| `--ru-accent` / success / warning / danger / info | 宿主语义状态 token | 强调与状态 |
+| `--ru-code-bg` | ink 6%（深色 10%） | 代码底 |
 | `--ru-radius` / `--ru-radius-sm` | `--dsw-radius-lg` / `-md` | 圆角 |
-| `--ru-shadow` | `--dsw-elevation-soft` | 阴影 |
-| `font-family` | `--dsw-font-family` | 字体 |
-| `font-size` | `--dsh-content-font-size` / `--dsw-font-markdown-base` | 字号 |
+| `--ru-shadow` | 由主题决定 | 阴影 |
+| `font-family` / `font-size` | `--dsw-font-family` / `--dsh-content-font-size` | 字体与字号 |
+
+> 关键改动（0.1.2）：表面与边框不再直接等于 host 的 layer/border token（那可能与消息背景同色），而是**从宿主 ink 色派生**，从而在任何宿主配色下都保持可见边界。多节点富内容块外层再包一个 `--ru-surface` 面板。
 
 软色（`--ru-*-soft`）用 `color-mix(in srgb, <语义色> N%, transparent)` 派生，自动跟随主题。
 

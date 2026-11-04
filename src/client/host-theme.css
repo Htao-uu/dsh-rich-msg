@@ -1,92 +1,99 @@
 /*
- * dsh-rich-msg host theme bridge.
+ * dsh-rich-msg host theme bridge (contrast-first).
  *
- * Loaded after the upstream rich-ui stylesheet. Every value here maps a DSH
- * theme token onto the renderer's own `--ru-*` variables, so the surfaces adopt
- * the host palette, typography and radii in both schemes without copying any
- * product-specific colour. Components keep their own layout; colours, fonts,
- * borders and shadows follow the host.
+ * Loaded after the upstream rich-ui stylesheet. Every colour is derived from
+ * the host palette: surfaces and borders are mixed from the host ink colour so
+ * a rendered block stays clearly separated from the message background in both
+ * light and dark themes, instead of dissolving into it.
  *
- * Dark mode follows DSH's own marker attribute (`data-ds-dark-theme`, set on
- * body or html depending on the shell) and also accepts upstream's
- * `data-theme="dark"`. Nothing is hard-coded to one palette.
+ * The block gets one framed surface when it contains more than one top-level
+ * node, and each data/control component keeps a lighter elevated surface inside
+ * that frame. Single paragraphs and single callouts stay inline.
+ *
+ * Dark mode follows DSH's own marker (`data-ds-dark-theme`) and also accepts
+ * upstream's `data-theme="dark"`.
  */
 
+/* ---- Light / adaptive tokens -------------------------------------------- */
+
 [data-rich-msg-root] .rich-ui {
-  --ru-bg: var(--dsw-alias-bg-layer-1, #ffffff);
-  --ru-elevated: var(--dsw-alias-bg-layer-1, #ffffff);
-  --ru-surface: var(--dsw-alias-bg-layer-2, #f6f6f7);
-  --ru-surface-2: var(--dsw-alias-bg-layer-3, #ececee);
+  --ru-bg: color-mix(in srgb, var(--dsw-alias-label-primary, #171717) 4%, var(--dsw-alias-bg-layer-1, #ffffff));
+  --ru-elevated: color-mix(in srgb, var(--dsw-alias-label-primary, #171717) 2%, var(--dsw-alias-bg-layer-1, #ffffff));
+  --ru-surface: color-mix(in srgb, var(--dsw-alias-label-primary, #171717) 7%, var(--dsw-alias-bg-layer-1, #ffffff));
+  --ru-surface-2: color-mix(in srgb, var(--dsw-alias-label-primary, #171717) 12%, var(--dsw-alias-bg-layer-1, #ffffff));
   --ru-ink: var(--dsw-alias-label-primary, #171717);
-  --ru-ink-soft: var(--dsw-alias-label-secondary, #3a3a3a);
-  --ru-muted: var(--dsw-alias-label-tertiary, #6b6b6b);
-  --ru-faint: var(--dsw-alias-label-caption, #6e6e6e);
-  --ru-caption-ink: var(--dsw-alias-label-caption, #5c5c60);
-  --ru-border: var(--dsw-alias-border-l1, #e4e4e6);
-  --ru-border-strong: var(--dsw-alias-border-l2, #d3d3d6);
-  --ru-grid: var(--dsw-alias-border-l1, #ededee);
+  --ru-ink-soft: color-mix(in srgb, var(--dsw-alias-label-primary, #171717) 86%, var(--dsw-alias-bg-layer-1, #ffffff));
+  --ru-muted: color-mix(in srgb, var(--dsw-alias-label-primary, #171717) 62%, var(--dsw-alias-bg-layer-1, #ffffff));
+  --ru-faint: color-mix(in srgb, var(--dsw-alias-label-primary, #171717) 52%, var(--dsw-alias-bg-layer-1, #ffffff));
+  --ru-caption-ink: color-mix(in srgb, var(--dsw-alias-label-primary, #171717) 72%, var(--dsw-alias-bg-layer-1, #ffffff));
+  --ru-border: color-mix(in srgb, var(--dsw-alias-label-primary, #171717) 17%, var(--dsw-alias-bg-layer-1, #ffffff));
+  --ru-border-strong: color-mix(in srgb, var(--dsw-alias-label-primary, #171717) 27%, var(--dsw-alias-bg-layer-1, #ffffff));
+  --ru-grid: color-mix(in srgb, var(--dsw-alias-label-primary, #171717) 11%, var(--dsw-alias-bg-layer-1, #ffffff));
   --ru-accent: var(--dsw-alias-state-business-primary, #1f7a63);
   --ru-accent-ink: var(--dsw-alias-label-primary-foreground, #ffffff);
-  --ru-accent-soft: color-mix(in srgb, var(--dsw-alias-state-business-primary, #1f7a63) 12%, transparent);
+  --ru-accent-soft: color-mix(in srgb, var(--dsw-alias-state-business-primary, #1f7a63) 14%, transparent);
   --ru-success: var(--dsw-alias-state-success-primary, #177a4f);
-  --ru-success-soft: color-mix(in srgb, var(--dsw-alias-state-success-primary, #177a4f) 12%, transparent);
+  --ru-success-soft: color-mix(in srgb, var(--dsw-alias-state-success-primary, #177a4f) 15%, transparent);
   --ru-warning: var(--dsw-alias-state-warn-primary, #92600f);
-  --ru-warning-soft: color-mix(in srgb, var(--dsw-alias-state-warn-primary, #92600f) 12%, transparent);
+  --ru-warning-soft: color-mix(in srgb, var(--dsw-alias-state-warn-primary, #92600f) 16%, transparent);
   --ru-danger: var(--dsw-alias-state-error-primary, #b03529);
-  --ru-danger-soft: color-mix(in srgb, var(--dsw-alias-state-error-primary, #b03529) 10%, transparent);
+  --ru-danger-soft: color-mix(in srgb, var(--dsw-alias-state-error-primary, #b03529) 13%, transparent);
   --ru-info: var(--dsw-alias-link, #2f6db0);
-  --ru-info-soft: color-mix(in srgb, var(--dsw-alias-link, #2f6db0) 12%, transparent);
+  --ru-info-soft: color-mix(in srgb, var(--dsw-alias-link, #2f6db0) 14%, transparent);
   --ru-link: var(--dsw-alias-link, #2f6db0);
-  --ru-code-bg: var(--dsw-alias-markdown-code-block, var(--dsw-alias-bg-layer-2, #f8f8f9));
+  --ru-code-bg: color-mix(in srgb, var(--dsw-alias-label-primary, #171717) 6%, var(--dsw-alias-bg-layer-1, #ffffff));
   --ru-code-ink: var(--dsw-alias-label-primary, #1f2328);
   --ru-radius: var(--dsw-radius-lg, 16px);
   --ru-radius-sm: var(--dsw-radius-md, 10px);
-  --ru-shadow: var(--dsw-elevation-soft, 0 1px 2px rgb(0 0 0 / 4%), 0 8px 24px rgb(0 0 0 / 4%));
+  --ru-shadow: 0 1px 2px rgb(0 0 0 / 5%), 0 8px 24px rgb(0 0 0 / 6%);
   font-family: var(--dsw-font-family, inherit);
   font-size: var(--dsh-content-font-size, var(--dsw-font-markdown-base, 15px));
   line-height: var(--dsw-font-markdown-base, 1.62);
   color-scheme: light;
 }
 
+/* ---- Dark tokens --------------------------------------------------------- */
+
 [data-ds-dark-theme] [data-rich-msg-root] .rich-ui,
 [data-theme="dark"] [data-rich-msg-root] .rich-ui,
 [data-ds-dark-theme][data-rich-msg-root] .rich-ui {
-  --ru-bg: var(--dsw-alias-bg-layer-1, #212121);
-  --ru-elevated: var(--dsw-alias-bg-layer-2, #262627);
-  --ru-surface: var(--dsw-alias-bg-layer-2, #2a2a2b);
-  --ru-surface-2: var(--dsw-alias-bg-layer-3, #353537);
+  --ru-bg: color-mix(in srgb, var(--dsw-alias-label-primary, #ececec) 8%, var(--dsw-alias-bg-layer-1, #212121));
+  --ru-elevated: color-mix(in srgb, var(--dsw-alias-label-primary, #ececec) 5%, var(--dsw-alias-bg-layer-1, #212121));
+  --ru-surface: color-mix(in srgb, var(--dsw-alias-label-primary, #ececec) 11%, var(--dsw-alias-bg-layer-1, #212121));
+  --ru-surface-2: color-mix(in srgb, var(--dsw-alias-label-primary, #ececec) 16%, var(--dsw-alias-bg-layer-1, #212121));
   --ru-ink: var(--dsw-alias-label-primary, #ececec);
-  --ru-ink-soft: var(--dsw-alias-label-secondary, #d2d2d3);
-  --ru-muted: var(--dsw-alias-label-tertiary, #a3a3a5);
-  --ru-faint: var(--dsw-alias-label-caption, #8b8b8e);
-  --ru-caption-ink: var(--dsw-alias-label-caption, #b8b8ba);
-  --ru-border: var(--dsw-alias-border-l1, #3a3a3c);
-  --ru-border-strong: var(--dsw-alias-border-l2, #4a4a4d);
-  --ru-grid: var(--dsw-alias-border-l1, #343436);
+  --ru-ink-soft: color-mix(in srgb, var(--dsw-alias-label-primary, #ececec) 88%, var(--dsw-alias-bg-layer-1, #212121));
+  --ru-muted: color-mix(in srgb, var(--dsw-alias-label-primary, #ececec) 68%, var(--dsw-alias-bg-layer-1, #212121));
+  --ru-faint: color-mix(in srgb, var(--dsw-alias-label-primary, #ececec) 56%, var(--dsw-alias-bg-layer-1, #212121));
+  --ru-caption-ink: color-mix(in srgb, var(--dsw-alias-label-primary, #ececec) 75%, var(--dsw-alias-bg-layer-1, #212121));
+  --ru-border: color-mix(in srgb, var(--dsw-alias-label-primary, #ececec) 21%, var(--dsw-alias-bg-layer-1, #212121));
+  --ru-border-strong: color-mix(in srgb, var(--dsw-alias-label-primary, #ececec) 32%, var(--dsw-alias-bg-layer-1, #212121));
+  --ru-grid: color-mix(in srgb, var(--dsw-alias-label-primary, #ececec) 14%, var(--dsw-alias-bg-layer-1, #212121));
   --ru-accent: var(--dsw-alias-state-business-primary, #6fc5a6);
   --ru-accent-ink: var(--dsw-alias-label-primary-foreground, #10231c);
-  --ru-accent-soft: color-mix(in srgb, var(--dsw-alias-state-business-primary, #6fc5a6) 18%, transparent);
+  --ru-accent-soft: color-mix(in srgb, var(--dsw-alias-state-business-primary, #6fc5a6) 20%, transparent);
   --ru-success: var(--dsw-alias-state-success-primary, #74c79f);
-  --ru-success-soft: color-mix(in srgb, var(--dsw-alias-state-success-primary, #74c79f) 18%, transparent);
+  --ru-success-soft: color-mix(in srgb, var(--dsw-alias-state-success-primary, #74c79f) 20%, transparent);
   --ru-warning: var(--dsw-alias-state-warn-primary, #e0b062);
-  --ru-warning-soft: color-mix(in srgb, var(--dsw-alias-state-warn-primary, #e0b062) 16%, transparent);
+  --ru-warning-soft: color-mix(in srgb, var(--dsw-alias-state-warn-primary, #e0b062) 18%, transparent);
   --ru-danger: var(--dsw-alias-state-error-primary, #f08a80);
-  --ru-danger-soft: color-mix(in srgb, var(--dsw-alias-state-error-primary, #f08a80) 14%, transparent);
+  --ru-danger-soft: color-mix(in srgb, var(--dsw-alias-state-error-primary, #f08a80) 16%, transparent);
   --ru-info: var(--dsw-alias-link, #85b6ee);
-  --ru-info-soft: color-mix(in srgb, var(--dsw-alias-link, #85b6ee) 14%, transparent);
+  --ru-info-soft: color-mix(in srgb, var(--dsw-alias-link, #85b6ee) 16%, transparent);
   --ru-link: var(--dsw-alias-link, #85b6ee);
-  --ru-code-bg: var(--dsw-alias-markdown-code-block, #1b1b1c);
+  --ru-code-bg: color-mix(in srgb, var(--dsw-alias-label-primary, #ececec) 10%, var(--dsw-alias-bg-layer-1, #212121));
   --ru-code-ink: var(--dsw-alias-label-primary, #e6e6e6);
-  --ru-shadow: var(--dsw-elevation-soft, 0 1px 2px rgb(0 0 0 / 30%), 0 12px 32px rgb(0 0 0 / 24%));
+  --ru-shadow: 0 1px 2px rgb(0 0 0 / 35%), 0 12px 32px rgb(0 0 0 / 30%);
   color-scheme: dark;
 }
 
-/* The rendered surface must never widen the message column. */
+/* ---- Block frame --------------------------------------------------------- */
+
 [data-rich-msg-root] {
   display: block;
   max-width: 100%;
   min-width: 0;
-  margin-block: 0.5rem;
+  margin-block: 0.7rem;
 }
 
 [data-rich-msg-root] .rich-ui {
@@ -95,13 +102,131 @@
   overflow-wrap: anywhere;
 }
 
+/*
+ * A rich block with several parts reads as one framed surface (ChatGPT-style
+ * answer card). A lone paragraph, callout or image keeps the flow inline.
+ */
+[data-rich-msg-root] .rich-ui:not(.ru-overlay) .ru-response-body:has(> :nth-child(2)) {
+  background: var(--ru-surface);
+  border: 1px solid var(--ru-border);
+  border-radius: calc(var(--ru-radius) + 2px);
+  padding: 16px 18px;
+  box-shadow: var(--ru-shadow);
+}
+
+[data-rich-msg-root] .rich-ui:not(.ru-overlay) .ru-response-body {
+  gap: 18px;
+}
+
+/* ---- Components on the framed surface ----------------------------------- */
+
+[data-rich-msg-root] .rich-ui .ru-card,
+[data-rich-msg-root] .rich-ui .ru-stat,
+[data-rich-msg-root] .rich-ui .ru-table-wrap,
+[data-rich-msg-root] .rich-ui .ru-chart {
+  background: var(--ru-elevated);
+  border: 1px solid var(--ru-border);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 4%);
+}
+
+[data-rich-msg-root] .rich-ui .ru-tabs {
+  background: var(--ru-elevated);
+  border-color: var(--ru-border);
+}
+
+[data-rich-msg-root] .rich-ui .ru-tabs [aria-selected="true"] {
+  background: var(--ru-surface-2);
+  color: var(--ru-ink);
+}
+
+[data-rich-msg-root] .rich-ui .rich-ui code,
+[data-rich-msg-root] .rich-ui code {
+  background: var(--ru-surface-2);
+  border-color: var(--ru-border);
+}
+
+/* ---- Fields and choices ------------------------------------------------- */
+
+[data-rich-msg-root] .rich-ui .ru-field input:not([type="range"]),
+[data-rich-msg-root] .rich-ui .ru-field select {
+  background: var(--ru-elevated);
+  border-color: var(--ru-border-strong);
+}
+
+[data-rich-msg-root] .rich-ui .ru-choice > legend {
+  font-weight: 600;
+  color: var(--ru-ink-soft);
+}
+
+[data-rich-msg-root] .rich-ui .ru-choice-options {
+  gap: 8px;
+}
+
+[data-rich-msg-root] .rich-ui .ru-choice-options > label {
+  padding: 9px 12px;
+  background: var(--ru-elevated);
+  border: 1px solid var(--ru-border);
+  border-radius: 10px;
+  transition: border-color 120ms ease, background 120ms ease;
+}
+
+[data-rich-msg-root] .rich-ui .ru-choice-options > label:hover {
+  border-color: var(--ru-border-strong);
+}
+
+[data-rich-msg-root] .rich-ui .ru-choice-options > label:has(input:checked) {
+  border-color: var(--ru-accent);
+  background: var(--ru-accent-soft);
+}
+
+/* Segmented controls keep their compact flat strip. */
+[data-rich-msg-root] .rich-ui .ru-segmented .ru-choice-options > label {
+  padding: 6px 13px;
+  border: 0;
+  background: transparent;
+  border-radius: 7px;
+}
+
+[data-rich-msg-root] .rich-ui .ru-segmented .ru-choice-options > label:has(input:checked) {
+  background: var(--ru-elevated);
+  border: 0;
+  box-shadow: 0 1px 3px rgb(0 0 0 / 12%);
+}
+
+/* A switch row gets the same row rhythm as a field. */
+[data-rich-msg-root] .rich-ui .ru-switch,
+[data-rich-msg-root] .rich-ui .ru-checkbox {
+  padding: 9px 12px;
+  background: var(--ru-elevated);
+  border: 1px solid var(--ru-border);
+  border-radius: 10px;
+}
+
+/* ---- Rhythm ------------------------------------------------------------- */
+
+[data-rich-msg-root] .rich-ui .ru-divider {
+  margin-block: 2px;
+}
+
+[data-rich-msg-root] .rich-ui .ru-meta {
+  padding-bottom: 2px;
+}
+
+[data-rich-msg-root] .rich-ui .ru-stack {
+  gap: 12px;
+}
+
 /* Mobile: keep cards readable at narrow widths. */
 @media (max-width: 480px) {
   [data-rich-msg-root] .rich-ui {
     font-size: 14.5px;
     line-height: 1.58;
   }
-  [data-rich-msg-root] .rich-ui .ru-card {
-    --ru-radius: 14px;
+  [data-rich-msg-root] .rich-ui:not(.ru-overlay) .ru-response-body:has(> :nth-child(2)) {
+    padding: 12px 13px;
+    border-radius: 14px;
+  }
+  [data-rich-msg-root] .rich-ui .ru-choice-options > label {
+    padding: 8px 10px;
   }
 }
