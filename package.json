@@ -1,6 +1,6 @@
 {
   "name": "dsh-rich-msg",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Rich content message renderer for DeepSeek Harness: declarative JSON rendered as themed, interactive message UI, with fence and tool-bridge channels.",
   "license": "MIT",
   "type": "module",

@@ -8,18 +8,24 @@
  * finished code surfaces, validate replacements, mount an isolated React root
  * next to them and hide the source block.
  *
- * What makes this adapter different from a naive \``\`` scanner:
+ * What makes this adapter different from a naive ``` scanner:
  *
  *   - a fence is claimed only inside an assistant row of the **final** answer.
  *     The chat snapshot decides this: intermediate steps that precede another
- *     tool call are never claimed, and a streaming step loses its preview the
- *     moment a later tool call makes it intermediate;
+ *     tool call are never claimed;
  *   - a fence that belongs to a reasoning block is never claimed, even though
  *     reasoning renders in the same row;
  *   - a fence in a normal code block, an ordinary JSON block, a tool row or a
  *     different fence language is left exactly as the host rendered it;
  *   - every DOM mutation stays additive: the host's own elements are hidden
- *     with the \`hidden\` attribute only, and restored on unload or removal.
+ *     with the `hidden` attribute only, and restored on unload or removal.
+ *
+ * Scheduling is fully event driven: MutationObserver batches from the host,
+ * chat-snapshot subscriptions, and `visibilitychange` are the only triggers.
+ * Bursts are coalesced onto one microtask; there is no polling timer and no
+ * animation-frame loop. Scanning is scoped to the rows an event actually
+ * touched, and every step is idempotent, so a self-inflicted mutation settles
+ * in the next observer round instead of breeding work.
  *
  * @module dsh-rich-msg/client/dom-renderer
  */
@@ -82,6 +88,10 @@ interface Mount {
   sessionId?: string;
   owner?: string;
   failed?: boolean;
+  /** Identity of the painted tree, so repeated scans never repaint. */
+  renderedKey?: string;
+  /** How often the host removed our container; a row that keeps fighting is dropped. */
+  reinserts: number;
 }
 
 /** How the renderer receives its data. */
@@ -92,6 +102,18 @@ export interface FenceRendererDeps {
   readonly sendAction: (sessionId: string | undefined, action: string, payload?: unknown) => void;
   /** Optional right-sidebar entity opener; returning false keeps the inline drawer. */
   readonly openEntity?: (entity: unknown, entities: unknown[]) => boolean;
+}
+
+/** Renderer tuning; all optional, all event-driven. */
+export interface FenceRendererOptions {
+  /**
+   * Render a still-streaming closing answer as an inert preview. Off by
+   * default: settled-only rendering avoids per-token React work, which is the
+   * expensive and risky path on a long transcript.
+   */
+  readonly previewDuringStreaming?: boolean;
+  /** Hard cap on concurrently mounted rich blocks. */
+  readonly maxMounts?: number;
 }
 
 /** Identity of the response row that owns a fence, independent of its content. */
@@ -139,7 +161,9 @@ function looksLikeDocument(raw: string): boolean {
 /** Parse one fence body into a claim, before row-level gating. */
 function claimFence(source: HTMLElement, body: HTMLElement, raw: string): Claim {
   if (raw.length > MAX_SOURCE_LENGTH) {
-    if (isOurs(labelToken(fenceLabel(source, body)))) return { kind: 'invalid', error: 'Document is longer than ' + MAX_SOURCE_LENGTH + ' characters' };
+    if (isOurs(labelToken(fenceLabel(source, body)))) {
+      return { kind: 'invalid', error: 'Document is longer than ' + MAX_SOURCE_LENGTH + ' characters' };
+    }
     return null;
   }
   const label = fenceLabel(source, body);
@@ -184,22 +208,61 @@ function isStreamingDom(source: HTMLElement): boolean {
   return source.closest('[data-streaming]') !== null;
 }
 
-/** Fingerprint of the facts that decide whether a mount can be reused. */
-function factsTag(facts: RowFacts | undefined): string {
-  if (facts === undefined) return 'no-facts';
-  return facts.finality + '|' + facts.fenceLocation;
+/** All candidate code surfaces inside one row (excluding our own containers). */
+function surfacesOf(row: HTMLElement): HTMLElement[] {
+  return [...row.querySelectorAll<HTMLElement>(SURFACES)].filter(
+    (surface) => !surface.closest(OWN) && !surface.parentElement?.closest(SURFACES)
+  );
+}
+
+/** Stable fingerprint of a row's claim-relevant state, for idempotent rescans. */
+function rowSignature(row: HTMLElement): string {
+  const key = row.getAttribute('data-chat-node-key') ?? row.getAttribute('data-chat-anchor-key') ?? '';
+  const streaming = isStreamingDom(row) ? '1' : '0';
+  const surfaces = surfacesOf(row);
+  const lengths = surfaces.map((surface) => {
+    const body = surface.querySelector('pre') ?? surface.querySelector('[data-code-block-content]');
+    return body?.textContent?.length ?? 0;
+  });
+  return key + '|' + streaming + '|' + surfaces.length + '|' + lengths.join(',');
 }
 
 /**
  * Install the fence renderer over one document scope.
  * @param deps - chat snapshot, artifact resolver and action delivery.
  * @param scope - DOM scope observed for code surfaces; defaults to body.
+ * @param options - event-driven renderer tuning.
  * @returns the disposer: unmounts every root and restores every source block.
  */
-export function installFenceRenderer(deps: FenceRendererDeps, scope: HTMLElement = document.body): () => void {
+export function installFenceRenderer(
+  deps: FenceRendererDeps,
+  scope: HTMLElement = document.body,
+  options: FenceRendererOptions = {}
+): () => void {
+  // One renderer per document scope. A reload, an HMR pass or a repeated
+  // install replaces the previous instance instead of racing it for the same
+  // rows (two renderers would each mount their own root).
+  if (activeScopeRenderer !== undefined && activeScopeRenderer.scope === scope) {
+    try {
+      activeScopeRenderer.dispose();
+    } catch {
+      /* Replacing a broken instance must not block the new one. */
+    }
+  }
+  const previewAllowed = options.previewDuringStreaming === true;
+  const maxMounts = typeof options.maxMounts === 'number' && options.maxMounts > 0 ? options.maxMounts : 40;
   const mounts = new Map<HTMLElement, Mount>();
+  /** Rows currently known to contain at least one candidate code surface. */
+  const knownRows = new Set<HTMLElement>();
+  /** Rows whose host reconciler keeps removing our container; never claimed again. */
+  const unstableRows = new WeakSet<HTMLElement>();
+  /** Cached signatures for rows we already evaluated. */
+  const rowSignatures = new Map<HTMLElement, string>();
   let disposed = false;
-  let scheduled = false;
+  let flushPending = false;
+  let pendingRows = new Set<HTMLElement>();
+  let fullRescan = true;
+  let sessionId: string | undefined;
 
   const remove = (source: HTMLElement, mount: Mount): void => {
     try {
@@ -213,9 +276,9 @@ export function installFenceRenderer(deps: FenceRendererDeps, scope: HTMLElement
   };
 
   const paint = (mount: Mount, facts: RowFacts | undefined): void => {
-    const sessionId = mount.sessionId;
+    const session = mount.sessionId;
     const onAction = (action: string, payload?: Record<string, unknown>): void => {
-      deps.sendAction(sessionId, action, payload);
+      deps.sendAction(session, action, payload);
     };
     const onOpenEntity = (entity: unknown, entities: unknown[]): boolean => {
       if (deps.openEntity === undefined) return false;
@@ -249,78 +312,116 @@ export function installFenceRenderer(deps: FenceRendererDeps, scope: HTMLElement
     mount.root.render(createElement(Diagnostic, { key: error + ':' + mount.raw, error, source: mount.raw }));
   };
 
-  const claimFor = (source: HTMLElement, body: HTMLElement, raw: string, row: HTMLElement): { claim: Claim; facts: RowFacts | undefined; streaming: boolean } => {
-    const facts = deps.chat.factsForRow(row, raw);
-    const claim = claimFence(source, body, raw);
-    if (claim === null) return { claim: null, facts, streaming: false };
-    if (facts !== undefined) {
-      // Reasoning never renders rich content, and intermediate steps are not answers.
-      if (facts.fenceLocation === 'reasoning') return { claim: null, facts, streaming: false };
-      if (facts.finality === 'not-final') return { claim: null, facts, streaming: false };
-      // During streaming the text can lag the DOM; only claim blocks already in a text block.
-      if (facts.finality === 'streaming-final' && facts.fenceLocation !== 'text') return { claim: null, facts, streaming: false };
-      return { claim, facts, streaming: facts.finality === 'streaming-final' };
-    }
-    // Fallback without a readable snapshot: settled rows only, never a live stream.
-    if (isStreamingDom(source)) return { claim: null, facts, streaming: false };
-    return { claim, facts, streaming: false };
+  /** Paint once per distinct tree identity; repeated scans stay free. */
+  const paintIfNeeded = (mount: Mount, facts: RowFacts | undefined): void => {
+    const key = mount.mode + '|' + mount.raw + '|' + (mount.error ?? '') + '|' + (mount.ref ?? '') + '|' + (facts?.finality ?? '');
+    if (mount.renderedKey === key) return;
+    mount.renderedKey = key;
+    paint(mount, facts);
   };
 
-  const scan = (): void => {
-    scheduled = false;
-    if (disposed) return;
-    for (const [source, mount] of mounts) {
-      if (!scope.contains(source)) remove(source, mount);
+  /**
+   * Keep the container directly after the source and hide the source. A host
+   * reconciler that keeps deleting our container marks the row unstable instead
+   * of starting an insert/remove fight.
+   * @returns false when the mount must be dropped.
+   */
+  const ensurePlacement = (source: HTMLElement, mount: Mount): boolean => {
+    if (source.nextSibling !== mount.container) {
+      if (!source.isConnected) return false;
+      mount.reinserts += 1;
+      if (mount.reinserts > 3) {
+        const row = rowOf(source);
+        if (row !== null) unstableRows.add(row);
+        return false;
+      }
+      source.after(mount.container);
     }
-    const candidates = new Set<HTMLElement>(scope.querySelectorAll<HTMLElement>(SURFACES));
-    for (const body of scope.querySelectorAll<HTMLElement>('[data-code-block-content]')) {
-      if (body.parentElement !== null) candidates.add(body.parentElement);
-    }
-    const sessionId = deps.chat.sessionId();
-    for (const source of candidates) {
-      if (source.closest(OWN)) continue;
-      const row = rowOf(source);
-      const body = source.querySelector('pre') ?? source.querySelector('[data-code-block-content]');
-      if (row === null || body === null || row.getAttribute('data-chat-flow-kind') !== ANSWER_ROW) {
+    if (!source.hidden) source.hidden = true;
+    if (mount.container.hidden) mount.container.hidden = false;
+    return true;
+  };
+
+  /**
+   * Evaluate the claim for one row and reconcile its mount.
+   * @param row - row element to evaluate.
+   * @param force - ignore the cached signature (chat/session state changed).
+   */
+  const evaluateRow = (row: HTMLElement, force = false): void => {
+    if (disposed || !row.isConnected) return;
+    if (unstableRows.has(row)) return;
+    if (row.getAttribute('data-chat-flow-kind') !== ANSWER_ROW) {
+      for (const source of surfacesOf(row)) {
         const mount = mounts.get(source);
         if (mount !== undefined) remove(source, mount);
+      }
+      knownRows.delete(row);
+      return;
+    }
+    const surfaces = surfacesOf(row);
+    if (surfaces.length === 0) {
+      knownRows.delete(row);
+      return;
+    }
+    knownRows.add(row);
+    const signature = rowSignature(row);
+    if (!force && rowSignatures.get(row) === signature) {
+      // Nothing changed since the last evaluation; only repair placement.
+      for (const source of surfaces) {
+        const mount = mounts.get(source);
+        if (mount !== undefined && !ensurePlacement(source, mount)) remove(source, mount);
+      }
+      return;
+    }
+    rowSignatures.set(row, signature);
+
+    for (const source of surfaces) {
+      const body = source.querySelector('pre') ?? source.querySelector('[data-code-block-content]');
+      if (body === null) {
+        const stale = mounts.get(source);
+        if (stale !== undefined) remove(source, stale);
         continue;
       }
       const raw = body.textContent ?? '';
-      const evaluated = claimFor(source, body, raw, row);
+      const facts = deps.chat.factsForRow(row, raw);
+      const claim = claimFence(source, body, raw);
       const mount = mounts.get(source);
-      if (evaluated.claim === null) {
+      const streaming = facts !== undefined ? facts.finality === 'streaming-final' : isStreamingDom(source);
+      // Settled-only by default: a streaming row keeps its native code until it settles.
+      const claimable = claim !== null
+        && !(facts !== undefined && facts.fenceLocation === 'reasoning')
+        && !(facts !== undefined && facts.finality === 'not-final')
+        && !(facts !== undefined && facts.finality === 'streaming-final' && facts.fenceLocation !== 'text')
+        && !(streaming && !previewAllowed);
+      if (!claimable || claim === null) {
         if (mount !== undefined) remove(source, mount);
         continue;
       }
-      if (mount !== undefined && mount.sessionId !== sessionId) {
-        remove(source, mount);
-      }
-      const existing = mounts.get(source);
       const owner = fenceOwnerKey(source, row);
-      const mode: Mount['mode'] = evaluated.claim.kind === 'spec' ? 'rich' : evaluated.claim.kind === 'ref' ? 'resolving' : 'diagnostic';
-      const ref = evaluated.claim.kind === 'ref' ? evaluated.claim.ref : undefined;
+      const nextMode: Mount['mode'] = claim.kind === 'spec' ? 'rich' : claim.kind === 'ref' ? 'resolving' : 'diagnostic';
+      const nextRef = claim.kind === 'ref' ? claim.ref : undefined;
+      // Same fence, new content: update in place instead of replacing the root.
       if (
-        existing !== undefined &&
-        !existing.failed &&
-        existing.raw === raw &&
-        existing.sessionId === sessionId &&
-        existing.streaming === evaluated.streaming &&
-        existing.owner === owner &&
-        existing.ref === ref &&
-        existing.mode === mode
+        mount !== undefined
+        && !mount.failed
+        && mount.sessionId === sessionId
+        && mount.owner === owner
+        && mount.ref === nextRef
+        && mount.mode !== 'resolving'
       ) {
-        if (source.nextSibling !== existing.container) source.after(existing.container);
-        if (!source.hidden) {
-          existing.container.hidden = true;
-          source.hidden = true;
+        mount.raw = raw;
+        mount.streaming = streaming;
+        mount.error = claim.kind === 'invalid' ? claim.error : undefined;
+        mount.spec = claim.kind === 'spec' ? claim.spec : mount.spec;
+        if (!ensurePlacement(source, mount)) {
+          remove(source, mount);
+          continue;
         }
+        paintIfNeeded(mount, facts);
         continue;
       }
-      if (existing !== undefined) remove(source, existing);
-      // An unfinished stream keeps native code until the block is claimable.
-      if (evaluated.streaming && evaluated.claim.kind === 'invalid') continue;
-
+      if (mount !== undefined) remove(source, mount);
+      if (mounts.size >= maxMounts) continue;
       const container = document.createElement('div');
       container.setAttribute(DOM_MARKERS.root, '');
       const root = createRoot(container);
@@ -330,33 +431,30 @@ export function installFenceRenderer(deps: FenceRendererDeps, scope: HTMLElement
         root,
         raw,
         sourceHidden: source.hidden,
-        streaming: evaluated.streaming,
-        mode,
-        ref,
-        spec: evaluated.claim.kind === 'spec' ? evaluated.claim.spec : undefined,
-        error: evaluated.claim.kind === 'invalid' ? evaluated.claim.error : undefined,
+        streaming,
+        mode: nextMode,
+        ref: nextRef,
+        spec: claim.kind === 'spec' ? claim.spec : undefined,
+        error: claim.kind === 'invalid' ? claim.error : undefined,
         sessionId,
-        owner
+        owner,
+        reinserts: 0
       };
       mounts.set(source, next);
       source.after(container);
       source.hidden = true;
-      if (mode === 'rich') {
-        paint(next, evaluated.facts);
+      if (nextMode === 'rich' || nextMode === 'diagnostic') {
+        paintIfNeeded(next, facts);
         continue;
       }
-      if (mode === 'diagnostic') {
-        paint(next, evaluated.facts);
-        continue;
-      }
-      // Reference fences resolve synchronously from the session log in the common case.
+      // Reference fence: resolve from the session log first, then the host route.
       const referenceId = next.ref ?? '';
       const immediate = deps.artifacts.sync(sessionId, referenceId);
       if (immediate !== undefined) {
         applyResolution(next, immediate);
         continue;
       }
-      paint(next, evaluated.facts);
+      paintIfNeeded(next, facts);
       void deps.artifacts.resolve(sessionId, referenceId).then((resolved) => {
         if (disposed || mounts.get(source) !== next) return;
         applyResolution(next, resolved);
@@ -369,57 +467,178 @@ export function installFenceRenderer(deps: FenceRendererDeps, scope: HTMLElement
       mount.mode = 'rich';
       mount.spec = resolved.spec;
       mount.container.hidden = false;
-      paint(mount, undefined);
+      mount.renderedKey = undefined;
+      paintIfNeeded(mount, undefined);
       return;
     }
     mount.mode = 'diagnostic';
     mount.error = 'Unresolved rich-msg reference: ' + (resolved.id || 'missing id');
     mount.container.hidden = false;
-    paint(mount, undefined);
+    mount.renderedKey = undefined;
+    paintIfNeeded(mount, undefined);
   };
 
-  const schedule = (): void => {
-    if (scheduled || disposed) return;
-    scheduled = true;
-    if (scope.querySelector('[data-streaming]') !== null && typeof requestAnimationFrame === 'function') {
-      requestAnimationFrame(scan);
-    } else {
-      queueMicrotask(scan);
+  /** Collect rows touched by one batch of host mutations. */
+  const rowsFromRecords = (records: MutationRecord[]): { rows: Set<HTMLElement>; full: boolean } => {
+    const rows = new Set<HTMLElement>();
+    let full = false;
+    for (const record of records) {
+      const target = record.target instanceof Element ? record.target : record.target.parentElement;
+      if (target === null) {
+        full = true;
+        continue;
+      }
+      if (target.closest(OWN) !== null) continue;
+      const row = target.closest<HTMLElement>('[data-chat-flow-kind]');
+      if (row !== null) rows.add(row);
+      for (const node of [...record.addedNodes, ...record.removedNodes]) {
+        if (!(node instanceof Element)) continue;
+        if (node.matches(OWN) || node.closest(OWN) !== null) continue;
+        const addedRow = node.closest?.<HTMLElement>('[data-chat-flow-kind]');
+        if (addedRow !== null && addedRow !== undefined) rows.add(addedRow);
+        for (const nested of node.querySelectorAll?.('[data-chat-flow-kind]') ?? []) {
+          if (nested instanceof HTMLElement) rows.add(nested);
+        }
+      }
+      // A code surface added or removed means the row's candidate set changed.
+      if (record.type === 'childList' || record.type === 'characterData') {
+        const owner = target.closest<HTMLElement>('[data-chat-flow-kind]');
+        if (owner !== null) rows.add(owner);
+      }
     }
+    return { rows, full };
+  };
+
+  /** Coalesce one flush onto a microtask; no timers and no frame loop. */
+  const schedule = (rows?: Iterable<HTMLElement>, full = false): void => {
+    if (disposed) return;
+    if (full) fullRescan = true;
+    if (rows !== undefined) for (const row of rows) pendingRows.add(row);
+    if (flushPending) return;
+    flushPending = true;
+    queueMicrotask(() => {
+      flushPending = false;
+      if (disposed) return;
+      flush();
+    });
+  };
+
+  /** Apply one coalesced batch: known rows, touched rows, session resets. */
+  const flush = (): void => {
+    if (disposed) return;
+    const nextSession = deps.chat.sessionId();
+    if (nextSession !== sessionId) {
+      sessionId = nextSession;
+      fullRescan = true;
+    }
+    if (fullRescan) {
+      fullRescan = false;
+      for (const [source, mount] of mounts) remove(source, mount);
+      knownRows.clear();
+      rowSignatures.clear();
+      // Discover rows without touching unrelated DOM: only candidate surfaces matter.
+      const rows = new Set<HTMLElement>();
+      for (const surface of scope.querySelectorAll<HTMLElement>(SURFACES)) {
+        if (surface.closest(OWN) !== null) continue;
+        const row = rowOf(surface);
+        if (row !== null) rows.add(row);
+      }
+      for (const row of rows) evaluateRow(row, true);
+      return;
+    }
+    for (const row of pendingRows) {
+      if (!row.isConnected) {
+        knownRows.delete(row);
+        continue;
+      }
+      evaluateRow(row);
+    }
+    pendingRows = new Set();
+    // A session switch or a host-side row replacement can strand mounts.
+    for (const [source, mount] of mounts) {
+      if (!source.isConnected || !mount.container.isConnected) remove(source, mount);
+    }
+    void knownRows;
+  };
+
+  /** Ask the chat snapshot for the rows it can still verify after an update. */
+  const onChatChange = (): void => {
+    if (disposed) return;
+    const nextSession = deps.chat.sessionId();
+    const rows = new Set<HTMLElement>();
+    for (const row of knownRows) {
+      if (row.isConnected) rows.add(row);
+    }
+    // Finality can change without a DOM mutation (a later tool call appears),
+    // so the chat signal forces re-evaluation of the rows we already know.
+    if (nextSession !== sessionId) {
+      schedule(rows, true);
+      return;
+    }
+    if (rows.size === 0) return;
+    if (flushPending) return;
+    flushPending = true;
+    queueMicrotask(() => {
+      flushPending = false;
+      if (disposed) return;
+      for (const row of rows) if (row.isConnected) evaluateRow(row, true);
+      for (const [source, mount] of mounts) {
+        if (!source.isConnected || !mount.container.isConnected) remove(source, mount);
+      }
+    });
   };
 
   const observer = new MutationObserver((records) => {
-    if (records.every((record) => {
-      const target = record.target instanceof Element ? record.target : record.target.parentElement;
-      return target?.closest(OWN) !== null && target?.closest(OWN) !== undefined;
-    })) {
-      return;
-    }
-    schedule();
+    if (disposed) return;
+    const { rows, full } = rowsFromRecords(records);
+    if (full || rows.size > 0) schedule(rows, full);
   });
   observer.observe(scope, {
     childList: true,
     subtree: true,
     characterData: true,
     attributes: true,
-    attributeFilter: ['data-streaming', 'hidden', 'data-chat-node-key', 'data-chat-anchor-key', 'data-chat-flow-kind']
+    attributeFilter: ['data-streaming', 'data-chat-node-key', 'data-chat-anchor-key', 'data-chat-flow-kind']
   });
-  const unsubscribeFacts = deps.chat.subscribe(schedule);
-  scan();
 
-  return () => {
+  const onVisibility = (): void => {
+    if (disposed) return;
+    if (typeof document !== 'undefined' && document.hidden) return;
+    schedule(undefined, true);
+  };
+  if (typeof document !== 'undefined') document.addEventListener('visibilitychange', onVisibility);
+
+  const unsubscribeChat = deps.chat.subscribe(onChatChange);
+  // First pass is synchronous so a static transcript is renderable immediately.
+  sessionId = deps.chat.sessionId();
+  fullRescan = true;
+  flush();
+
+  const dispose = (): void => {
     if (disposed) return;
     disposed = true;
-    unsubscribeFacts();
+    unsubscribeChat();
     observer.disconnect();
+    if (typeof document !== 'undefined') document.removeEventListener('visibilitychange', onVisibility);
     for (const [source, mount] of mounts) remove(source, mount);
+    knownRows.clear();
+    rowSignatures.clear();
+    pendingRows = new Set();
+    if (activeScopeRenderer !== undefined && activeScopeRenderer.dispose === dispose) {
+      activeScopeRenderer = undefined;
+    }
   };
+  activeScopeRenderer = { scope, dispose };
+  return dispose;
 }
 
+/** The single live renderer for one document scope. */
+let activeScopeRenderer: { scope: HTMLElement; dispose: () => void } | undefined;
+
 /** Stable persistence identity for one mounted block. */
-function persistenceKeyOf(mount: Mount, facts: RowFacts | undefined): string | undefined {
-  if (mount.sessionId === undefined) return undefined;
-  const tag = factsTag(facts);
+function persistenceKeyOf(mount: Mount, facts: RowFacts | undefined): string {
+  if (mount.sessionId === undefined) return JSON.stringify(['dsh-rich-msg', mount.owner ?? '', mount.ref ?? '']);
+  const tag = facts === undefined ? 'no-facts' : facts.finality + '|' + facts.fenceLocation;
   return JSON.stringify(['dsh-rich-msg', mount.sessionId, mount.owner ?? '', tag, mount.ref ?? '']);
 }
 

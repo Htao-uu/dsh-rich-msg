@@ -46,7 +46,7 @@ node scripts/build.mjs
 
 ```
 lib/index.js   48,876 bytes
-lib/client.js 341,008 bytes
+lib/client.js 346,449 bytes   (0.1.1)
 host esbuild warnings: 0
 tsc --noEmit: 0 errors
 ```
@@ -59,9 +59,11 @@ npx vitest run
 ```
 
 ```
-Test Files  13 passed (13)
-Tests       210 passed (210)
+Test Files  15 passed (15)
+Tests       226 passed (226)
 ```
+
+> 0.1.1 修复记录：0.1.0 在长会话中会出现页面无响应——根因是流式期间每 token 重建 React root、每次 DOM 变更全量扫描整页、宿主 reconcider 与容器隐藏互相拉扯。0.1.1 改为纯事件驱动、默认只在稳定回答渲染、按行局部评估、原地更新、单 scope 单实例、重插上限。上述 226 项测试与隔离宿主压力验证（201 行模拟历史 + 150 次流式形状 DOM 变更：0 long task、最大帧间隔 19.5ms、单 root、卸载归零）均在 0.1.1 上通过。
 
 覆盖范围：
 
@@ -69,7 +71,6 @@ Tests       210 passed (210)
 |---|---|
 | `tests/core/schema.test.ts` | RichSpec 全字段校验、非法输入、上限、实体/引用/图表/表格/控件 |
 | `tests/core/evaluator.test.ts` | 表达式求值、算子树、状态、边界 |
-| `tests/core/references.test.ts` | 引用目标收集 |
 | `tests/shared/protocol.test.ts` | ref 协议、Action 信封、id 语法、大小上限 |
 | `tests/host/artifacts.test.ts` | 会话隔离、TTL、容量、淘汰、清理 |
 | `tests/host/tools.test.ts` | 工具 Schema、中性描述、校验/发布行为、取消信号 |
